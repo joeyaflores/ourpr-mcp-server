@@ -8,11 +8,87 @@
 // credential into every tool call the agent makes — into its context, its
 // transcript, and any log of either. The env var keeps it out of all three.
 //
+// NOTHING THIS SERVER PRINTS MAY CARRY A CONFIGURED VALUE. `OURPR_TOKEN` is
+// never printed anywhere, and `OURPR_API_URL` is reduced to scheme and host
+// before it reaches an error — see `safeOrigin`. An error message travels into
+// the agent's context and its transcript, so printing there is publishing.
+//
 // NOTHING HERE MAY WRITE TO STDOUT. On a stdio server stdout IS the protocol
 // stream, and one stray `console.log` corrupts it. Diagnostics go to stderr.
 
 const TOKEN = process.env.OURPR_TOKEN ?? "";
 const BASE = (process.env.OURPR_API_URL ?? "https://ourpr.app/api").replace(/\/$/, "");
+
+/**
+ * The configured host, with everything else removed.
+ *
+ * NO ENVIRONMENT VALUE IS ECHOED WHOLE. An error goes straight into the
+ * agent's context and its transcript, so anything printed there is published.
+ * `OURPR_API_URL` is usually just a hostname — and it is a URL, so it CAN
+ * carry `user:password@` before the host, which a self-hosted or staging
+ * instance behind basic auth plausibly would. Dropping userinfo, path, query
+ * and fragment leaves the one part that helps a person debug and none of the
+ * part that must not travel.
+ *
+ * An unparseable value yields a placeholder rather than the raw string,
+ * because "unparseable" is exactly the case where the string is unexpected.
+ */
+function safeOrigin(): string {
+  try {
+    const url = new URL(BASE);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return "the configured host";
+  }
+}
+
+/**
+ * Why a request failed, WITHOUT the message.
+ *
+ * A Node fetch failure carries the full request URL in `cause`, and a timeout
+ * message can too. The code — ECONNREFUSED, ENOTFOUND, TimeoutError — says
+ * everything a person needs and carries nothing they did not choose to
+ * publish.
+ */
+function reason(err: unknown): string {
+  // WALK THE CAUSE CHAIN. Node wraps a connection failure as
+  // `TypeError: fetch failed` with the useful code — ECONNREFUSED, ENOTFOUND —
+  // one or two levels down in `cause`. Reading only the top gave "TypeError",
+  // which tells a person nothing they can act on.
+  let node: unknown = err;
+  for (let depth = 0; node && depth < 4; depth++) {
+    const code = (node as { code?: string }).code;
+    if (typeof code === "string" && code) return code;
+    node = (node as { cause?: unknown }).cause;
+  }
+  // NO CODE — a URL that will not parse ("bad port") reaches here, and its
+  // MESSAGE is the only useful thing. Passed on ONLY when it cannot be
+  // carrying configured values: an "@" means userinfo, and the raw base or the
+  // token must never appear. Fails closed to the error name.
+  const deepest = deepestMessage(err);
+  const safe =
+    deepest &&
+    !deepest.includes("@") &&
+    !deepest.includes(BASE) &&
+    (!TOKEN || !deepest.includes(TOKEN));
+  if (safe) return deepest.slice(0, 80);
+
+  const name = err instanceof Error ? err.name : "";
+  return name && name !== "Error" ? name : "the request did not complete";
+}
+
+function deepestMessage(err: unknown): string {
+  let node: unknown = err;
+  let found = "";
+  for (let depth = 0; node && depth < 4; depth++) {
+    const message = (node as { message?: string }).message;
+    if (typeof message === "string" && message && message !== "fetch failed") {
+      found = message;
+    }
+    node = (node as { cause?: unknown }).cause;
+  }
+  return found;
+}
 
 /** Thrown with copy an agent can act on rather than a status code. */
 export class ApiError extends Error {}
@@ -32,7 +108,20 @@ function guidance(status: number, detail: string): string {
   return detail || `ourpr answered ${status}.`;
 }
 
+/**
+ * One line per call, on stderr.
+ *
+ * The 2026 guidance asks a server to log tool invocations, downstream calls,
+ * errors and denials, so an operator can see what an agent did on their
+ * behalf. THE PATH IS LOGGED AND THE TOKEN NEVER IS — a log that carries the
+ * credential is a second copy of it, in a file nobody is guarding.
+ */
+function audit(path: string, outcome: string, ms: number): void {
+  console.error(`[ourpr-mcp-server] ${outcome} ${path.split("?")[0]} ${ms}ms`);
+}
+
 export async function get<T>(path: string): Promise<T> {
+  const started = Date.now();
   if (!TOKEN) {
     throw new ApiError(
       "OURPR_TOKEN is not set. Create a token in ourpr under Settings, " +
@@ -45,11 +134,30 @@ export async function get<T>(path: string): Promise<T> {
     response = await fetch(`${BASE}${path}`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
       signal: AbortSignal.timeout(60_000),
+      // DO NOT FOLLOW REDIRECTS WITH A CREDENTIAL ATTACHED. Node strips the
+      // Authorization header across origins, so this is belt rather than
+      // braces — but a redirect from ourpr's own host is not something this
+      // server should follow silently either, because the answer would then
+      // come from somewhere the operator did not configure.
+      redirect: "manual",
     });
   } catch (err) {
     throw new ApiError(
-      `Could not reach ourpr at ${BASE}. Check OURPR_API_URL and the network. ` +
-        `(${err instanceof Error ? err.message : String(err)})`,
+      `Could not reach ourpr at ${safeOrigin()} (${reason(err)}). Check ` +
+        "OURPR_API_URL and the network.",
+    );
+  }
+
+  // OUTSIDE THE TRY, deliberately. Thrown inside it, this was caught by the
+  // network handler two lines up and re-reported as "could not reach ourpr" —
+  // an error that names the wrong cause is worse than the status code it
+  // replaced.
+  if (response.status >= 300 && response.status < 400) {
+    audit(path, `${response.status}-redirect`, Date.now() - started);
+    throw new ApiError(
+      "ourpr redirected the request, and this server does not follow " +
+        "redirects while carrying a credential. Check OURPR_API_URL — it " +
+        "should be the API base, ending in /api.",
     );
   }
 
@@ -60,9 +168,12 @@ export async function get<T>(path: string): Promise<T> {
     } catch {
       // A non-JSON error body. The status still carries the meaning.
     }
+    audit(path, `${response.status}`, Date.now() - started);
     throw new ApiError(guidance(response.status, detail));
   }
-  return (await response.json()) as T;
+  const body = (await response.json()) as T;
+  audit(path, "200", Date.now() - started);
+  return body;
 }
 
 // ─── Units ──────────────────────────────────────────────────────────────────

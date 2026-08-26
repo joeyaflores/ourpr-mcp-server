@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 import { ApiError, day, duration, feet, get, miles, stamp } from "./api.js";
+import { cell, fenced } from "./safe.js";
 import type {
   ActivitiesResponse,
   Activity,
@@ -69,8 +70,9 @@ function summarise(a: Activity) {
   return {
     id: String(a.id),
     date: day(a.date),
-    name: a.name ?? "",
-    type: a.activity_type,
+    // RUNNER-AUTHORED TEXT. Cleaned at the one boundary it crosses.
+    name: cell(a.name),
+    type: cell(a.activity_type, 24),
     miles: miles(a.distance_meters),
     pace_per_mile: a.pace_per_mile ?? null,
     moving_time: duration(a.duration_seconds),
@@ -87,7 +89,7 @@ function table(rows: ReturnType<typeof summarise>[]): string {
     "|---|---|---|---|---|---|---|---|";
   const body = rows
     .map((r) =>
-      `| ${r.date} | ${r.name.slice(0, 32)} | ${r.type} | ${r.miles ?? "—"} | ` +
+      `| ${r.date} | ${r.name} | ${r.type} | ${r.miles ?? "—"} | ` +
       `${r.pace_per_mile ?? "—"} | ${r.moving_time ?? "—"} | ` +
       `${r.elevation_ft ?? "—"} | ${r.avg_hr ?? "—"} |`,
     )
@@ -102,12 +104,10 @@ server.registerTool(
   {
     title: "List runs in a date range",
     description:
-      "The runner's own training history between two dates, newest first. " +
-      "Returns a compact row per activity: date, name, type, miles, pace, " +
-      "moving time, elevation gain and average heart rate. Use this first for " +
-      "almost any question about training — totals, streaks, trends, finding " +
-      "a specific run. For the full detail of ONE run, including its mile " +
-      "splits, call ourpr_get_run with the id from here.",
+      "Training history between two dates, newest first: date, name, type, " +
+      "miles, pace, time, elevation, average heart rate. Start here for " +
+      "totals, streaks, trends, or finding a run. For one run's splits, use " +
+      "ourpr_get_run with an id from here.",
     inputSchema: {
       start_date: z
         .string()
@@ -118,21 +118,14 @@ server.registerTool(
       include_non_runs: z
         .boolean()
         .default(false)
-        .describe(
-          "Include rides, gym sessions and other activity types. Runs only by " +
-            "default. Non-run types carry no pace and often no distance.",
-        ),
+        .describe("Include rides, gym and other types. Runs only by default."),
       limit: z
         .number()
         .int()
         .min(1)
         .max(MAX_LIMIT)
         .default(DEFAULT_LIMIT)
-        .describe(
-          `Most rows to return, ${DEFAULT_LIMIT} by default. If the window ` +
-            "holds more, the answer says how many were left out — it never " +
-            "truncates silently.",
-        ),
+        .describe("Most rows to return. The answer says what it left out."),
     },
     outputSchema: {
       runs: z.array(z.record(z.string(), z.unknown())),
@@ -155,13 +148,13 @@ server.registerTool(
 
       const header =
         `${all.length} ${include_non_runs ? "activities" : "runs"} between ` +
-        `${start_date} and ${end_date}.` +
+        `${cell(start_date, 10)} and ${cell(end_date, 10)}.` +
         (truncated
           ? ` Showing the ${shown.length} newest — ${all.length - shown.length} ` +
             "older ones are not listed. Narrow the dates or raise `limit` to see them."
           : "");
 
-      return ok(`${header}\n\n${shown.length ? table(shown) : "No activities in that window."}`, {
+      return ok(`${header}\n\n` + fenced(shown.length ? table(shown) : "No activities in that window."), {
         runs: shown,
         returned: shown.length,
         total_in_window: all.length,
@@ -180,14 +173,13 @@ server.registerTool(
   {
     title: "Get one run in full",
     description:
-      "Everything ourpr holds about a single activity, including its mile " +
-      "splits, heart rate, cadence, calories and the recording device. Get " +
-      "the id from ourpr_list_runs. For the second-by-second profile — " +
-      "elevation, heart rate, power along the route — use ourpr_run_stream.",
+      "One activity in full: mile splits, heart rate, cadence, calories, " +
+      "device. Id comes from ourpr_list_runs. For the profile along the " +
+      "route, use ourpr_run_stream.",
     inputSchema: {
       activity_id: z
         .string()
-        .describe("The run's id, as returned by ourpr_list_runs."),
+        .describe("Run id from ourpr_list_runs."),
     },
     outputSchema: {
       run: z.record(z.string(), z.unknown()),
@@ -208,7 +200,7 @@ server.registerTool(
         max_hr: a.max_heartrate ?? null,
         avg_cadence_spm: a.avg_cadence ?? null,
         calories: a.calories ?? null,
-        device: a.device ?? null,
+        device: cell(a.device, 40) || null,
         has_route: Boolean(a.summary_polyline),
       };
 
@@ -223,7 +215,7 @@ server.registerTool(
           : "\nNo mile splits recorded for this run.",
       ].filter(Boolean);
 
-      return ok(lines.join("\n"), { run, splits });
+      return ok(fenced(lines.join("\n")), { run, splits });
     } catch (err) {
       return fail(err);
     }
@@ -237,14 +229,11 @@ server.registerTool(
   {
     title: "Get a run's elevation and sensor profile",
     description:
-      "A run resampled onto a fixed 10 metre grid: elevation, elapsed time, " +
-      "and where the watch recorded them, heart rate, power and cadence. " +
-      "Sample i sits at i x grid_m along the track, so distance is implied by " +
-      "position and there is no distance array. Returns summary statistics " +
-      "rather than every sample, because a long run holds thousands. " +
-      "A 404 is a normal answer: indoor runs have no profile.",
+      "A run's profile on a 10 m grid — elevation, heart rate, power, " +
+      "cadence — as min, average, max and coverage per channel, not every " +
+      "sample. No profile is a normal answer for an indoor run.",
     inputSchema: {
-      activity_id: z.string().describe("The run's id, from ourpr_list_runs."),
+      activity_id: z.string().describe("Run id from ourpr_list_runs."),
     },
     outputSchema: {
       grid_m: z.number(),
@@ -308,12 +297,10 @@ server.registerTool(
   {
     title: "Get a run's laps",
     description:
-      "The laps the watch itself recorded for one run — the runner's own " +
-      "button presses, which is what a track session or an interval workout " +
-      "is actually divided by. Different from mile splits: laps follow the " +
-      "workout, splits follow the mile.",
+      "The laps the watch recorded for one run — the runner's own button " +
+      "presses. Laps follow the workout; mile splits follow the mile.",
     inputSchema: {
-      activity_id: z.string().describe("The run's id, from ourpr_list_runs."),
+      activity_id: z.string().describe("Run id from ourpr_list_runs."),
     },
     outputSchema: { laps: z.array(z.record(z.string(), z.unknown())) },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -358,11 +345,9 @@ server.registerTool(
   {
     title: "Find rep workouts across the history",
     description:
-      "Every interval session ourpr can find in the runner's history — the " +
-      "reps, their distance and their times. Detection reads the recorded " +
-      "laps and is gated on whether the run happened on an oval, because the " +
-      "rep detector alone is only about 40% precise across a whole history. " +
-      "It never writes: a session it misses is still in ourpr_list_runs.",
+      "Interval sessions found across the history, with reps and distances. " +
+      "Detection is conservative, so a session it misses is still in " +
+      "ourpr_list_runs.",
     inputSchema: {
       limit: z
         .number()
@@ -370,7 +355,7 @@ server.registerTool(
         .min(10)
         .max(1000)
         .default(200)
-        .describe("How many recent activities to sweep. 200 by default."),
+        .describe("How many recent activities to read."),
     },
     outputSchema: {
       workouts: z.array(z.record(z.string(), z.unknown())),
@@ -386,7 +371,7 @@ server.registerTool(
       const workouts = (data.workouts ?? []).map((w) => ({
         activity_id: String(w.activity_id),
         date: day(w.date),
-        name: w.name ?? "",
+        name: cell(w.name),
         sets: (w.groups ?? []).map((g) => ({
           reps: g.count,
           rep_meters: g.rep_meters,
@@ -406,7 +391,7 @@ server.registerTool(
             .join("\n")
         : `No rep sessions in the ${data.scanned} most recent activities. ` +
           "Raise `limit` to read further back.";
-      return ok(text, { workouts, scanned: data.scanned });
+      return ok(fenced(text), { workouts, scanned: data.scanned });
     } catch (err) {
       return fail(err);
     }
@@ -420,11 +405,9 @@ server.registerTool(
   {
     title: "Look for reps in one run",
     description:
-      "Ask whether a single run was an interval session, and what the reps " +
-      "were. Use it when ourpr_list_runs shows a run that looks like a " +
-      "workout and you want its structure.",
+      "Whether one particular run was an interval session, and its reps.",
     inputSchema: {
-      activity_id: z.string().describe("The run's id, from ourpr_list_runs."),
+      activity_id: z.string().describe("Run id from ourpr_list_runs."),
     },
     outputSchema: { detection: z.record(z.string(), z.unknown()) },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -434,8 +417,13 @@ server.registerTool(
       const detection = await get<Record<string, unknown>>(
         `/users/me/activities/${activity_id}/workout-detection`,
       );
+      // BOUNDED. This was an unbounded pretty-printed dump, which is the one
+      // shape that can spend an agent's context without anyone choosing to.
+      const json = JSON.stringify(detection);
       return ok(
-        "```json\n" + JSON.stringify(detection, null, 2) + "\n```",
+        json.length > 4000
+          ? `${json.slice(0, 4000)}… (truncated; read the structured result)`
+          : json,
         { detection },
       );
     } catch (err) {
@@ -451,10 +439,8 @@ server.registerTool(
   {
     title: "Find runs over comparable ground",
     description:
-      "Runs matching a given distance and climb — how a runner finds what " +
-      "they have already done that resembles a race or a route they are " +
-      "planning. Climb is measured from each run's own recorded profile, not " +
-      "from a terrain model.",
+      "Stretches of past runs matching a distance and climb — what the " +
+      "runner has already done that resembles a race they are training for.",
     inputSchema: {
       miles: z.number().min(0.1).max(200).describe("Target distance in miles."),
       gain_ft: z.number().min(0).max(30000).describe("Target climb in feet."),
@@ -464,7 +450,7 @@ server.registerTool(
         .min(1)
         .max(200)
         .default(15)
-        .describe("How close the climb must be, in feet."),
+        .describe("Climb tolerance, feet."),
     },
     outputSchema: {
       matches: z.array(z.record(z.string(), z.unknown())),
@@ -486,13 +472,13 @@ server.registerTool(
           matches
             .map(
               (m) =>
-                `| ${m.date.slice(0, 10)} | ${m.name.slice(0, 28)} | ${m.from_mi} | ` +
+                `| ${m.date.slice(0, 10)} | ${cell(m.name, 28)} | ${m.from_mi} | ` +
                 `${m.to_mi} | ${m.gain_ft} | ${m.grade_pct}% |`,
             )
             .join("\n")
         : `Nothing near ${mi} mi with about ${gain_ft} ft of climb in the ` +
           `${data.scanned} runs read. Widen \`tolerance_ft\`.`;
-      return ok(text, { matches, scanned: data.scanned });
+      return ok(fenced(text), { matches, scanned: data.scanned });
     } catch (err) {
       return fail(err);
     }

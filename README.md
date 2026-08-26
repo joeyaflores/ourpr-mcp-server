@@ -172,6 +172,62 @@ cannot widen its own scope.
 Revoke any token at any time in **Settings → Access tokens**. Revocation is
 immediate and permanent — a revoked token can never be restored.
 
+### Tool results are untrusted content
+
+A run's name and description are free text a person typed, or that arrived from
+an import. They travel into the same token stream as the agent's instructions,
+and a model has no boundary between the two.
+
+Two defences, doing different jobs:
+
+**The structure is neutralised.** Control characters, newlines, zero-width and
+bidirectional marks are stripped; a `|` is escaped so the table column it sits
+in survives; every field is capped. A newline in a name would otherwise end a
+table row early and shift every column after it — an agent then reads a wrong
+answer rather than refusing one.
+
+**The boundary is named.** Runner-authored data is returned inside
+`<ourpr-data>` delimiters with one line saying it is data, not instructions.
+That reduces how often injection lands. It does not prevent it, and nothing
+here is written as though it did.
+
+What this deliberately does not do is pattern-match for "ignore previous
+instructions" and its cousins. That is whack-a-mole against anyone who writes
+the sentence differently, and it would suggest the content had been made safe.
+
+### No configured value is ever printed
+
+`OURPR_TOKEN` appears in no log, no error and no tool result.
+
+`OURPR_API_URL` is reduced to scheme and host before it reaches an error
+message. It is a URL, so it can carry `user:password@` — which a self-hosted
+instance behind basic auth plausibly would — and an error goes straight into
+the agent's transcript.
+
+This is not hypothetical. Node's own fetch error for such a URL reads:
+
+```
+Request cannot be constructed from a URL that includes credentials:
+https://admin:s3cr3t@127.0.0.1:59999/api
+```
+
+The password is in the message. This server passes an underlying error message
+through only when it contains no `@`, no configured base URL and no token, and
+otherwise falls back to the error code.
+
+### Other properties
+
+**No token passthrough.** The server holds its own credential from the
+environment and never accepts one from the MCP client, which is what the
+specification forbids.
+
+**Redirects are refused.** A request carrying a credential does not follow one.
+
+**Every call is logged to stderr** — outcome, path without its query, and
+duration. The token is never in it.
+
+**Stateless.** No handles are minted, so there is nothing to hijack.
+
 ## License
 
 MIT
