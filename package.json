@@ -1,0 +1,24 @@
+{
+  "name": "ourpr-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server that gives an AI agent read access to your own ourpr running history",
+  "type": "module",
+  "bin": { "ourpr-mcp-server": "./build/index.js" },
+  "scripts": {
+    "build": "tsc && node -e \"const fs=require('fs');const f='build/index.js';const c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!')){fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c)};fs.chmodSync(f,0o755)\"",
+    "start": "node build/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "files": ["build"],
+  "keywords": ["ourpr", "mcp", "model-context-protocol", "running", "training", "ai-agent"],
+  "author": "Joey Flores",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}
