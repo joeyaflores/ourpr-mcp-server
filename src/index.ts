@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { ApiError, day, duration, feet, get, miles, stamp } from "./api.js";
+import { ApiError, day, duration, feet, get, miles, pathId, stamp } from "./api.js";
 import { cell, fenced } from "./safe.js";
 import type {
   ActivitiesResponse,
@@ -189,7 +189,7 @@ server.registerTool(
   },
   async ({ activity_id }) => {
     try {
-      const a = await get<Activity>(`/users/me/activities/${activity_id}`);
+      const a = await get<Activity>(`/users/me/activities/${pathId(activity_id)}`);
       const splits = (a.splits ?? []).map((s) => ({
         mile: s.split_number,
         pace: s.pace_per_mile ?? null,
@@ -246,7 +246,7 @@ server.registerTool(
   async ({ activity_id }) => {
     try {
       const s = await get<StreamResponse>(
-        `/users/me/activities/${activity_id}/stream`,
+        `/users/me/activities/${pathId(activity_id)}/stream`,
       );
 
       // SUMMARY AND NOT THE SAMPLES. A 10 mile run is ~1,600 points per
@@ -279,7 +279,7 @@ server.registerTool(
       const total_miles = miles(s.total_m) ?? 0;
       return ok(
         `Profile over ${total_miles} mi, ${s.points} samples every ${s.grid_m} m` +
-          (s.source ? ` (from ${s.source})` : "") +
+          (s.source ? ` (from ${cell(s.source, 24)})` : "") +
           ".\n\n" +
           (present || "No sensor channels were recorded for this run."),
         { grid_m: s.grid_m, total_miles, samples: s.points, channels },
@@ -307,7 +307,7 @@ server.registerTool(
   },
   async ({ activity_id }) => {
     try {
-      const raw = await get<Lap[]>(`/users/me/activities/${activity_id}/laps`);
+      const raw = await get<Lap[]>(`/users/me/activities/${pathId(activity_id)}/laps`);
       const laps = raw.map((l, i) => {
         const mi = miles(l.distance_meters);
         // THE PACE IS DERIVED HERE, because the payload does not carry one.
@@ -415,7 +415,7 @@ server.registerTool(
   async ({ activity_id }) => {
     try {
       const detection = await get<Record<string, unknown>>(
-        `/users/me/activities/${activity_id}/workout-detection`,
+        `/users/me/activities/${pathId(activity_id)}/workout-detection`,
       );
       // BOUNDED. This was an unbounded pretty-printed dump, which is the one
       // shape that can spend an agent's context without anyone choosing to.

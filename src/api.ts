@@ -16,8 +16,18 @@
 // NOTHING HERE MAY WRITE TO STDOUT. On a stdio server stdout IS the protocol
 // stream, and one stray `console.log` corrupts it. Diagnostics go to stderr.
 
+import { cell } from "./safe.js";
+
 const TOKEN = process.env.OURPR_TOKEN ?? "";
 const BASE = (process.env.OURPR_API_URL ?? "https://ourpr.app/api").replace(/\/$/, "");
+
+// A bearer token over plain http travels in the clear. Warn once rather than
+// refuse: localhost is how this server runs against a dev backend.
+if (BASE.startsWith("http://") && !/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(BASE)) {
+  console.error(
+    "[ourpr-mcp-server] OURPR_API_URL is http, not https - the token is not encrypted in transit",
+  );
+}
 
 /**
  * The configured host, with everything else removed.
@@ -164,14 +174,29 @@ export async function get<T>(path: string): Promise<T> {
   if (!response.ok) {
     let detail = "";
     try {
-      detail = ((await response.json()) as { detail?: string }).detail ?? "";
+      // CLEANED LIKE ANY OTHER REMOTE TEXT. Today `detail` is written by the
+      // backend, but a future backend change could derive it from runner
+      // text, and this is the one place it enters an error message.
+      detail = cell(((await response.json()) as { detail?: string }).detail, 200);
     } catch {
       // A non-JSON error body. The status still carries the meaning.
     }
     audit(path, `${response.status}`, Date.now() - started);
     throw new ApiError(guidance(response.status, detail));
   }
-  const body = (await response.json()) as T;
+  let body: T;
+  try {
+    body = (await response.json()) as T;
+  } catch {
+    // A 200 whose body is not JSON - a proxy page, a captive portal. The
+    // parse error's message can carry a fragment of that body, so the error
+    // is replaced rather than passed on.
+    audit(path, "200-not-json", Date.now() - started);
+    throw new ApiError(
+      `ourpr at ${safeOrigin()} answered 200 with a body that is not JSON. ` +
+        "Check OURPR_API_URL - it should be the API base, ending in /api.",
+    );
+  }
   audit(path, "200", Date.now() - started);
   return body;
 }
@@ -181,6 +206,16 @@ export async function get<T>(path: string): Promise<T> {
 // The API speaks metres and stores pace as a string, "7:43". An agent reads
 // miles and reasons about pace as text. Convert once, here, so no tool does it
 // twice and no two tools do it differently.
+
+/**
+ * An id on its way into a URL path.
+ *
+ * Ids arrive from the agent, and an agent can be steered by text inside a
+ * tool result. Unencoded, a crafted id could append query parameters or move
+ * the request to a sibling path - fetch normalises "../" before sending.
+ * Encoding makes the id one path segment and nothing more.
+ */
+export const pathId = (value: string): string => encodeURIComponent(value);
 
 export const METERS_PER_MILE = 1609.344;
 

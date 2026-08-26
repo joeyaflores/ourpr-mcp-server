@@ -47,7 +47,10 @@ export function cell(value: string | null | undefined, max = MAX_NAME): string {
     .replace(/[\u0000-\u001F\u007F]/g, " ")
     // Zero-width and bidirectional marks: invisible in a transcript, and they
     // are how text can read one way to a person and another to a parser.
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\u2060\u00AD]/g, "")
+    // The tag block, U+E0000-E007F: invisible characters that mirror ASCII,
+    // which is the known channel for smuggling hidden instructions.
+    .replace(/[\u{E0000}-\u{E007F}]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
   const clipped = flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;

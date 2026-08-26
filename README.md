@@ -189,7 +189,8 @@ answer rather than refusing one.
 **The boundary is named.** Runner-authored data is returned inside
 `<ourpr-data>` delimiters with one line saying it is data, not instructions.
 That reduces how often injection lands. It does not prevent it, and nothing
-here is written as though it did.
+here is written as though it did. The delimiters wrap the text content only;
+the structured result carries the same neutralised fields without them.
 
 What this deliberately does not do is pattern-match for "ignore previous
 instructions" and its cousins. That is whack-a-mole against anyone who writes
