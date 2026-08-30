@@ -24,7 +24,16 @@ export interface Activity {
   max_heartrate?: number | null;
   avg_cadence?: number | null;
   calories?: number | null;
-  device?: string | null;
+  /** NEVER a string. Measured across all 7,911 production rows on 2026-08-30:
+   *  3,986 null and 3,925 objects, none of them a string. The shape varies —
+   *  {make,model,raw}, {app,raw}, {app,make,model}, {make,raw}, {model,raw} —
+   *  so read it with `deviceLabel`, never directly. */
+  device?: {
+    raw?: string | null;
+    make?: string | null;
+    model?: string | null;
+    app?: string | null;
+  } | null;
   splits?: Split[] | null;
   garmin?: Record<string, unknown> | null;
   summary_polyline?: string | null;

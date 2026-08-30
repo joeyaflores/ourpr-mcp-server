@@ -41,6 +41,20 @@ import type {
  * than egress, not less.
  */
 
+/** The watch or app that recorded a run, as one readable name.
+ *
+ *  `device` is an OBJECT and its keys vary — measured across all 7,911
+ *  production rows: {make,model,raw} 2,064, {app,raw} 718, {app,make,model}
+ *  684, {make,raw} 373, {model,raw} 81, and 3,986 null. So prefer the human
+ *  pair, fall back to whichever single name exists, and only then to `raw`,
+ *  which is a slug like "garmin/fr255" and is the last resort rather than the
+ *  answer. */
+function deviceLabel(d: Activity["device"]): string | null {
+  if (!d) return null;
+  const named = [d.make, d.model].filter(Boolean).join(" ").trim();
+  return cell(named || d.app || d.raw, 40) || null;
+}
+
 const server = new McpServer({ name: "ourpr-mcp-server", version: "0.1.0" });
 
 // A window can hold years. This bounds ONE answer, and when it bites the
@@ -200,7 +214,7 @@ server.registerTool(
         max_hr: a.max_heartrate ?? null,
         avg_cadence_spm: a.avg_cadence ?? null,
         calories: a.calories ?? null,
-        device: cell(a.device, 40) || null,
+        device: deviceLabel(a.device),
         has_route: Boolean(a.summary_polyline),
       };
 

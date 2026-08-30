@@ -39,9 +39,22 @@ const MAX_NOTE = 300;
  * Control characters and newlines become spaces, a pipe is escaped so the
  * column it sits in survives, and the whole thing is capped.
  */
-export function cell(value: string | null | undefined, max = MAX_NAME): string {
-  if (!value) return "";
-  const flat = value
+export function cell(value: unknown, max = MAX_NAME): string {
+  if (value === null || value === undefined || value === "") return "";
+  // TAKES `unknown`, NOT `string` (2026-08-30). It was typed `string`, and
+  // `activity_data.device` turned out to be an OBJECT, so `.replace` threw and
+  // `ourpr_get_run` failed outright for every run — a whole tool lost to one
+  // wrong field type. A tool that returns nothing for one field is a small
+  // fault; a tool that throws is a total one, and this layer sits between the
+  // agent and data whose shape the server does not control.
+  //
+  // A primitive is printed. Anything else returns "" rather than the string
+  // "[object Object]": rendering junk into an agent's context is worse than
+  // rendering nothing, and nothing is what the caller already handles.
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+    return "";
+  }
+  const flat = String(value)
     // Every control character, newline and tab included. A newline in a cell
     // ends the row early and every column after it shifts.
     .replace(/[\u0000-\u001F\u007F]/g, " ")
