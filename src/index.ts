@@ -13,42 +13,9 @@ import type {
   TerrainResponse,
 } from "./types.js";
 
-/**
- * ourpr-mcp-server — an agent reads your own running history.
- *
- * WHY THIS EXISTS. Every authenticated read in ourpr is gated by a session
- * that lives about an hour, so nothing outside a browser could hold one.
- * Personal access tokens changed that, and this is what they were for: your
- * training data, in whatever agent you already use, with a credential you
- * issued to yourself and can revoke.
- *
- * READ ONLY, and not by omission. A token's default scope is read, and every
- * route behind these tools is a GET. Nothing here can change a run, plan a
- * week, or mint another token.
- *
- * THE TOOL SET WAS CHOSEN BY AN EVALUATION, not by listing the API. Ten
- * verified questions were written first (`backend/scripts/mcp_eval_oracle.py`)
- * and they said what matters: nine of ten need the activity window, three need
- * one run in full, two need a second source. So the window is the tool that
- * has to be excellent, and a `training_summary` tool that seemed obvious when
- * guessing turned out to answer nothing and was not built.
- *
- * CONTEXT IS THE REAL CONSTRAINT. A window can hold 800 runs, and handing an
- * agent 800 full activity objects destroys the context it needs to think. So
- * `ourpr_list_runs` returns a COMPACT table and one run in full is a separate
- * tool. That is the same lesson the backend learned when `laps` turned out to
- * be 36% of a payload nothing rendered — an agent's context is more expensive
- * than egress, not less.
- */
+// Read only: every route behind these tools is a GET.
 
-/** The watch or app that recorded a run, as one readable name.
- *
- *  `device` is an OBJECT and its keys vary — measured across all 7,911
- *  production rows: {make,model,raw} 2,064, {app,raw} 718, {app,make,model}
- *  684, {make,raw} 373, {model,raw} 81, and 3,986 null. So prefer the human
- *  pair, fall back to whichever single name exists, and only then to `raw`,
- *  which is a slug like "garmin/fr255" and is the last resort rather than the
- *  answer. */
+// device keys vary: the human pair first, then a single name, then the raw slug.
 function deviceLabel(d: Activity["device"]): string | null {
   if (!d) return null;
   const named = [d.make, d.model].filter(Boolean).join(" ").trim();
@@ -57,9 +24,7 @@ function deviceLabel(d: Activity["device"]): string | null {
 
 const server = new McpServer({ name: "ourpr-mcp-server", version: "0.1.0" });
 
-// A window can hold years. This bounds ONE answer, and when it bites the
-// answer says so — a silent truncation reads as "that is all there was",
-// which is the difference between a short answer and a wrong one.
+// Bounds one answer; when it bites, the answer says so.
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
@@ -68,7 +33,7 @@ const ok = (text: string, structured: Record<string, unknown>) => ({
   structuredContent: structured,
 });
 
-/** Errors reach the agent as an error result with copy it can act on. */
+// An error reaches the agent as an error result with copy it can act on.
 const fail = (err: unknown) => ({
   content: [
     {
@@ -79,12 +44,10 @@ const fail = (err: unknown) => ({
   isError: true,
 });
 
-/** One activity, flattened to what an agent reasons about. */
 function summarise(a: Activity) {
   return {
     id: String(a.id),
     date: day(a.date),
-    // RUNNER-AUTHORED TEXT. Cleaned at the one boundary it crosses.
     name: cell(a.name),
     type: cell(a.activity_type, 24),
     miles: miles(a.distance_meters),
@@ -95,8 +58,7 @@ function summarise(a: Activity) {
   };
 }
 
-/** A markdown table. Agents read these far more reliably than raw JSON, and
- *  it costs a fraction of the tokens the same rows cost as objects. */
+// A markdown table costs fewer tokens than the same rows as objects.
 function table(rows: ReturnType<typeof summarise>[]): string {
   const head =
     "| date | name | type | mi | pace | time | ft | hr |\n" +
@@ -263,9 +225,7 @@ server.registerTool(
         `/users/me/activities/${pathId(activity_id)}/stream`,
       );
 
-      // SUMMARY AND NOT THE SAMPLES. A 10 mile run is ~1,600 points per
-      // channel and five channels. Handing an agent 8,000 numbers spends its
-      // context on data it will only reduce anyway.
+      // A summary, not the samples: a 10 mile run is about 8,000 numbers.
       const stats = (values?: (number | null)[] | null, scale = 1) => {
         const nums = (values ?? []).filter((v): v is number => v != null);
         if (!nums.length) return null;
@@ -279,7 +239,7 @@ server.registerTool(
       };
 
       const channels = {
-        // Stored in centimetres; feet is what the app speaks.
+        // Stored in centimetres; the app speaks feet.
         elevation_ft: stats(s.elev_cm, 0.0328084),
         heart_rate_bpm: stats(s.hr_bpm),
         power_w: stats(s.power_w),
@@ -324,15 +284,11 @@ server.registerTool(
       const raw = await get<Lap[]>(`/users/me/activities/${pathId(activity_id)}/laps`);
       const laps = raw.map((l, i) => {
         const mi = miles(l.distance_meters);
-        // THE PACE IS DERIVED HERE, because the payload does not carry one.
-        // Moving seconds, not elapsed: standing at the line between reps is
-        // not part of the rep, and the whole app measures pace this way.
+        // The payload carries no pace; moving seconds, as the app measures it.
         const secs = l.moving_seconds ?? l.duration_seconds ?? null;
         const perMile = mi && secs ? secs / mi : null;
         return {
-          // THE API COUNTS FROM ZERO AND A RUNNER COUNTS FROM ONE. A watch
-          // says "Lap 1" on the first press, so a table headed lap 0 is
-          // describing a different session from the one they remember.
+          // The API counts from zero; a watch counts from one.
           lap: (l.index ?? i) + 1,
           miles: mi,
           time: duration(secs),
@@ -392,8 +348,7 @@ server.registerTool(
           times_s: g.times_s ?? null,
         })),
       }));
-      // AN EMPTY ANSWER SAYS WHAT WAS READ. "None found" and "none exist" are
-      // different claims, and only the first one is true here.
+      // "None found" and "none exist" differ; only the first is true here.
       const text = workouts.length
         ? `${workouts.length} rep sessions in the ${data.scanned} activities read.\n\n` +
           workouts
@@ -431,8 +386,7 @@ server.registerTool(
       const detection = await get<Record<string, unknown>>(
         `/users/me/activities/${pathId(activity_id)}/workout-detection`,
       );
-      // BOUNDED. This was an unbounded pretty-printed dump, which is the one
-      // shape that can spend an agent's context without anyone choosing to.
+      // Bounded, so a dump cannot spend the agent's context.
       const json = JSON.stringify(detection);
       return ok(
         json.length > 4000
@@ -503,8 +457,7 @@ server.registerTool(
 
 async function main() {
   await server.connect(new StdioServerTransport());
-  // STDERR, ALWAYS. On a stdio server stdout is the protocol stream and one
-  // `console.log` corrupts it.
+  // Stdout is the protocol stream; diagnostics go to stderr.
   console.error("[ourpr-mcp-server] ready");
 }
 

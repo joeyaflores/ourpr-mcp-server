@@ -1,22 +1,13 @@
-// What the ourpr API returns, narrowed to the fields these tools read.
-//
-// DELIBERATELY PARTIAL. `DetailedActivity` on the backend carries far more
-// than this, and copying it whole would put every field into an agent's
-// context whether or not a tool uses it. These interfaces name what is read
-// and nothing else, which is the same whitelist discipline the backend's own
-// response model keeps.
+// Deliberately partial: only the fields a tool reads.
 
-/** One activity. Every measure is optional because a measure that does not
- *  apply is NULL and is not zero — a strength session covers no ground, and a
- *  treadmill run has no route. The backend's `activity_taxonomy` is the
- *  authority on which measures a type carries. */
+// A measure that does not apply is null, not zero.
 export interface Activity {
   id: string | number;
   name: string | null;
   date: string;
   activity_type: string;
   distance_meters?: number | null;
-  /** Stored as "7:43", not as a number. */
+  // Stored as "7:43", not as a number.
   pace_per_mile?: string | null;
   duration_seconds?: number | null;
   elevation_gain_meters?: number | null;
@@ -24,10 +15,7 @@ export interface Activity {
   max_heartrate?: number | null;
   avg_cadence?: number | null;
   calories?: number | null;
-  /** NEVER a string. Measured across all 7,911 production rows on 2026-08-30:
-   *  3,986 null and 3,925 objects, none of them a string. The shape varies —
-   *  {make,model,raw}, {app,raw}, {app,make,model}, {make,raw}, {model,raw} —
-   *  so read it with `deviceLabel`, never directly. */
+  // An object whose keys vary; read it with deviceLabel.
   device?: {
     raw?: string | null;
     make?: string | null;
@@ -53,31 +41,22 @@ export interface ActivitiesResponse {
   is_complete: boolean;
 }
 
-/** Migration 056: a run resampled onto a fixed 10 m grid. Distance is implied
- *  by index — sample i sits at i * grid_m — so there is no distance array. */
+// A 10 m grid; sample i sits at i * grid_m.
 export interface StreamResponse {
   activity_id: string;
   grid_m: number;
-  /** How many samples each channel holds. The API sends it; do not derive it
-   *  from a channel, because a channel below 50% coverage is not written at
-   *  all and would report zero. */
+  // Sent by the API; a channel below 50% coverage is absent and cannot give it.
   points: number;
   total_m: number;
-  /** `elev_cm` and NOT `elevation_cm`. Written from the payload rather than
-   *  from memory, after the first guess made elevation silently vanish from
-   *  every profile — the failure that succeeds and accomplishes nothing. */
+  // The key is elev_cm, not elevation_cm.
   elev_cm?: (number | null)[] | null;
   time_s?: (number | null)[] | null;
   hr_bpm?: (number | null)[] | null;
   power_w?: (number | null)[] | null;
   cadence_spm?: (number | null)[] | null;
-  /** Where the samples came from, e.g. "garmin_fit". */
   source?: string | null;
 }
 
-/** A lap as the API sends it. Read off the payload, not from memory — the
- *  first guess named four fields that do not exist and the table rendered a
- *  column of em dashes, which reads as "the watch recorded nothing". */
 export interface Lap {
   index: number;
   distance_meters?: number | null;
@@ -100,9 +79,7 @@ export interface RepWorkout {
   groups?: RepGroup[] | null;
 }
 
-/** Both sweeps report how much they LOOKED AT, not only what they found. An
- *  empty answer means "none in the 60 I read", never "you have none" — the
- *  no-silent-caps rule, carried through to the agent. */
+// scanned says how much was read; an empty answer is not "none exist".
 export interface RepWorkoutsResponse {
   workouts: RepWorkout[];
   scanned: number;
