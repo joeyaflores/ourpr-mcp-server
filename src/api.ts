@@ -19,7 +19,7 @@
 import { cell } from "./safe.js";
 
 const TOKEN = process.env.OURPR_TOKEN ?? "";
-const BASE = (process.env.OURPR_API_URL ?? "https://ourpr.app/api").replace(/\/$/, "");
+const BASE = (process.env.OURPR_API_URL ?? "https://ourpr.onrender.com/api").replace(/\/$/, "");
 
 // A bearer token over plain http travels in the clear. Warn once rather than
 // refuse: localhost is how this server runs against a dev backend.
@@ -103,7 +103,11 @@ function deepestMessage(err: unknown): string {
 /** Thrown with copy an agent can act on rather than a status code. */
 export class ApiError extends Error {}
 
-function guidance(status: number, detail: string): string {
+function guidance(status: number, detail: string, retryAfterS?: string): string {
+  if (status === 429) {
+    const wait = /^\d+$/.test(retryAfterS ?? "") ? `${retryAfterS} seconds` : "a minute";
+    return `ourpr allows 60 reads a minute for each token. Wait ${wait}, then ask again.`;
+  }
   if (status === 401) {
     return (
       "ourpr rejected the token. It may be revoked, expired (a token lasts 90 " +
@@ -182,7 +186,9 @@ export async function get<T>(path: string): Promise<T> {
       // A non-JSON error body. The status still carries the meaning.
     }
     audit(path, `${response.status}`, Date.now() - started);
-    throw new ApiError(guidance(response.status, detail));
+    throw new ApiError(
+      guidance(response.status, detail, response.headers.get("retry-after") ?? undefined),
+    );
   }
   let body: T;
   try {

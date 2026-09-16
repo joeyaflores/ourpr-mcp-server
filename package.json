@@ -1,16 +1,45 @@
 {
   "name": "ourpr-mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that gives an AI agent read access to your own ourpr running history",
+  "mcpName": "io.github.joeyaflores/ourpr-mcp-server",
   "type": "module",
-  "bin": { "ourpr-mcp-server": "./build/index.js" },
+  "bin": {
+    "ourpr-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build",
+    "manifest.json",
+    "server.json"
+  ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');const f='build/index.js';const c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!')){fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c)};fs.chmodSync(f,0o755)\"",
     "start": "node build/index.js",
-    "prepublishOnly": "npm run build"
+    "test": "node --test --import tsx \"test/**/*.test.ts\"",
+    "prepublishOnly": "npm run build && npm test"
   },
-  "files": ["build"],
-  "keywords": ["ourpr", "mcp", "model-context-protocol", "running", "training", "ai-agent"],
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeyaflores/ourpr-mcp-server.git"
+  },
+  "homepage": "https://ourpr.app/your-runs",
+  "bugs": {
+    "url": "https://github.com/joeyaflores/ourpr-mcp-server/issues"
+  },
+  "keywords": [
+    "ourpr",
+    "mcp",
+    "model-context-protocol",
+    "running",
+    "training",
+    "ai-agent"
+  ],
   "author": "Joey Flores",
   "license": "MIT",
   "dependencies": {
@@ -19,6 +48,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.8.3"
   }
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.joeyaflores/ourpr-mcp-server",
+  "description": "Read your own ourpr running history in an AI agent. Runs, splits, laps, streams, interval workouts.",
+  "repository": {
+    "url": "https://github.com/joeyaflores/ourpr-mcp-server",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "ourpr-mcp-server",
+      "version": "0.2.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "OURPR_TOKEN",
+          "description": "Your personal access token from ourpr Settings.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

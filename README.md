@@ -19,42 +19,43 @@ credential you issued to yourself and can revoke.
 Name it after the machine it will live on. Copy it — it is shown once and
 cannot be recovered. A token lasts 90 days.
 
-**2. Point a client at it.**
+**2. Point a client at it.** The package runs from npm; nothing to clone.
 
 ### Claude Code
 
 ```bash
-claude mcp add ourpr \
-  --env OURPR_TOKEN=ourpr_pat_... \
-  -- node /path/to/ourpr-mcp-server/build/index.js
+claude mcp add ourpr --env OURPR_TOKEN=ourpr_pat_... -- npx -y ourpr-mcp-server
 ```
 
 ### Claude Desktop
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`
+Download `ourpr.mcpb` from the latest release and open it. Claude Desktop asks
+for the token and stores it as a secret.
+
+Or edit `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "ourpr": {
-      "command": "node",
-      "args": ["/path/to/ourpr-mcp-server/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "ourpr-mcp-server"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
 }
 ```
 
-### Cursor
+### Cursor, VS Code
 
-`.cursor/mcp.json`, same shape as above.
+`.cursor/mcp.json` or `.vscode/mcp.json`, same shape as above.
 
 ### From source
 
 ```bash
-git clone https://github.com/joeyaflores/OurPR.git
-cd OurPR/ourpr-mcp-server
-npm install && npm run build
+git clone https://github.com/joeyaflores/ourpr-mcp-server.git
+cd ourpr-mcp-server
+npm install && npm run build && npm test
 ```
 
 ## Environment
@@ -62,7 +63,7 @@ npm install && npm run build
 | | |
 |---|---|
 | `OURPR_TOKEN` | **Required.** Your personal access token. |
-| `OURPR_API_URL` | Optional. Defaults to `https://ourpr.app/api`. |
+| `OURPR_API_URL` | Optional. Defaults to `https://ourpr.onrender.com/api`. |
 
 The token is an environment variable and **not** a tool parameter, on purpose:
 it never changes between calls, so passing it per call would put a live
@@ -169,6 +170,9 @@ The token grants read access to your own activity data and nothing else. It
 cannot write, cannot issue another token, cannot revoke your existing ones, and
 cannot widen its own scope.
 
+Each token may make 60 reads a minute. ourpr answers 429 past that, with
+`RateLimit` and `Retry-After` headers, and the tool says how long to wait.
+
 Revoke any token at any time in **Settings → Access tokens**. Revocation is
 immediate and permanent — a revoked token can never be restored.
 
@@ -228,6 +232,14 @@ specification forbids.
 duration. The token is never in it.
 
 **Stateless.** No handles are minted, so there is nothing to hijack.
+
+## Release
+
+A tag `v*` publishes to npm through trusted publishing (GitHub OIDC, provenance
+attached; no token lives in the repository). `npm run build` writes the
+bundle's entry point; `npx @anthropic-ai/mcpb pack` builds `ourpr.mcpb` for
+the release. `server.json` registers the package in the MCP Registry with
+`mcp-publisher publish`.
 
 ## License
 
