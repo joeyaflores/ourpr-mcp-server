@@ -5,7 +5,7 @@
   "mcpName": "io.github.joeyaflores/ourpr-mcp-server",
   "type": "module",
   "bin": {
-    "ourpr-mcp-server": "./build/index.js"
+    "ourpr-mcp-server": "build/index.js"
   },
   "files": [
     "build",
