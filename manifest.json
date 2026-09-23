@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ourpr-mcp-server",
   "display_name": "ourpr",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Read your own ourpr running history in Claude.",
   "long_description": "Runs, mile splits, watch laps, streams, interval workouts and similar terrain, from your own ourpr account. Read only. The token comes from ourpr Settings and you can revoke it there at any time.",
   "author": { "name": "Joey Flores", "url": "https://ourpr.app" },

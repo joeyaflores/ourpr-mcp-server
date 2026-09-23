@@ -16,6 +16,7 @@ const CALLS: [string, Record<string, unknown>][] = [
   ["ourpr_rep_workouts", {}],
   ["ourpr_detect_reps", { activity_id: "1" }],
   ["ourpr_similar_terrain", { miles: 10, gain_ft: 500 }],
+  ["ourpr_plan_week", { plans: [{ date: "2099-01-01", miles: 6 }] }],
 ];
 
 test("no tool result and no stderr line carries the token or the URL's userinfo", async () => {

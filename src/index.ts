@@ -2,18 +2,31 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { ApiError, day, duration, feet, get, miles, pathId, stamp } from "./api.js";
+import {
+  ApiError,
+  METERS_PER_MILE,
+  day,
+  duration,
+  feet,
+  get,
+  miles,
+  pathId,
+  post,
+  stamp,
+} from "./api.js";
 import { cell, fenced } from "./safe.js";
 import type {
   ActivitiesResponse,
   Activity,
   Lap,
+  PlannedRun,
   RepWorkoutsResponse,
   StreamResponse,
   TerrainResponse,
 } from "./types.js";
 
-// Read only: every route behind these tools is a GET.
+// Seven reads and one write. The write needs a token made with the write
+// scope and ourpr create behind it; every other tool is a GET.
 
 // device keys vary: the human pair first, then a single name, then the raw slug.
 function deviceLabel(d: Activity["device"]): string | null {
@@ -22,7 +35,7 @@ function deviceLabel(d: Activity["device"]): string | null {
   return cell(named || d.app || d.raw, 40) || null;
 }
 
-const server = new McpServer({ name: "ourpr-mcp-server", version: "0.1.0" });
+const server = new McpServer({ name: "ourpr-mcp-server", version: "0.3.0" });
 
 // Bounds one answer; when it bites, the answer says so.
 const DEFAULT_LIMIT = 100;
@@ -447,6 +460,81 @@ server.registerTool(
         : `Nothing near ${mi} mi with about ${gain_ft} ft of climb in the ` +
           `${data.scanned} runs read. Widen \`tolerance_ft\`.`;
       return ok(fenced(text), { matches, scanned: data.scanned });
+    } catch (err) {
+      return fail(err);
+    }
+  },
+);
+
+// ─── The week ───────────────────────────────────────────────────────────────
+
+const PLAN_TAGS = ["easy", "workout", "race"] as const;
+
+server.registerTool(
+  "ourpr_plan_week",
+  {
+    title: "Put runs on the runner's week",
+    description:
+      "Write one planned run, or a week of them, onto days still ahead. Each " +
+      "lands on the runner's week as a plan they can see, edit and remove. " +
+      "Needs a token made with the write scope and ourpr create. " +
+      "Never logs a run.",
+    inputSchema: {
+      plans: z
+        .array(
+          z.object({
+            date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe("YYYY-MM-DD, after today."),
+            miles: z.number().min(0.1).max(200).optional().describe("Planned distance."),
+            minutes: z.number().min(1).max(1440).optional().describe("Planned time."),
+            name: z.string().max(120).optional().describe("A short name for the run."),
+            note: z.string().max(500).optional().describe("A line the runner will read."),
+            tag: z.enum(PLAN_TAGS).optional().describe("How hard: easy, workout or race."),
+            is_long: z.boolean().optional().describe("The week's long run."),
+          }),
+        )
+        .min(1)
+        .max(14)
+        .describe("One run, or up to fourteen."),
+    },
+    outputSchema: {
+      written: z.array(z.record(z.string(), z.unknown())),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  },
+  async ({ plans }) => {
+    try {
+      const body = {
+        plans: plans.map((p) => ({
+          planned_date: p.date,
+          distance_meters: p.miles == null ? null : Math.round(p.miles * METERS_PER_MILE),
+          duration_seconds: p.minutes == null ? null : Math.round(p.minutes * 60),
+          name: p.name ?? null,
+          note: p.note ?? null,
+          tag: p.tag ?? null,
+          is_long: p.is_long ?? false,
+        })),
+      };
+      const rows = await post<PlannedRun[]>("/users/me/planned-activities/week", body);
+      const written = rows.map((r) => ({
+        id: String(r.id),
+        date: day(r.planned_date),
+        name: cell(r.name),
+        miles: miles(r.distance_meters),
+        time: duration(r.duration_seconds),
+        tag: r.tag ?? null,
+        is_long: r.is_long,
+      }));
+      const text =
+        `${written.length} plan${written.length === 1 ? "" : "s"} on the runner's week.\n\n` +
+        "| date | name | mi | time | tag |\n|---|---|---|---|---|\n" +
+        written
+          .map(
+            (w) =>
+              `| ${w.date} | ${w.name || "—"} | ${w.miles ?? "—"} | ${w.time ?? "—"} | ` +
+              `${w.tag ?? "—"}${w.is_long ? " · long" : ""} |`,
+          )
+          .join("\n");
+      return ok(text, { written });
     } catch (err) {
       return fail(err);
     }

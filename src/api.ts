@@ -63,7 +63,10 @@ export class ApiError extends Error {}
 function guidance(status: number, detail: string, retryAfterS?: string): string {
   if (status === 429) {
     const wait = /^\d+$/.test(retryAfterS ?? "") ? `${retryAfterS} seconds` : "a minute";
-    return `ourpr allows 60 reads a minute for each token. Wait ${wait}, then ask again.`;
+    return (
+      "ourpr allows 60 reads a minute for each token and 30 plans a day. " +
+      `Wait ${wait}, then ask again.`
+    );
   }
   if (status === 401) {
     return (
@@ -72,7 +75,12 @@ function guidance(status: number, detail: string, retryAfterS?: string): string 
       "Settings, Access tokens."
     );
   }
-  if (status === 403) return "That token can read only. This action needs a write scope.";
+  if (status === 403) {
+    return (
+      "ourpr refused the write. The token needs the write scope, chosen when " +
+      "it is made, and ourpr create behind it."
+    );
+  }
   if (status === 404) return "ourpr has no such run. Check the id against ourpr_list_runs.";
   if (status === 422) return `ourpr refused the request: ${detail}`;
   if (status >= 500) return "ourpr had an error. Try again in a moment.";
@@ -84,7 +92,7 @@ function audit(path: string, outcome: string, ms: number): void {
   console.error(`[ourpr-mcp-server] ${outcome} ${path.split("?")[0]} ${ms}ms`);
 }
 
-export async function get<T>(path: string): Promise<T> {
+async function request<T>(method: "GET" | "POST", path: string, payload?: unknown): Promise<T> {
   const started = Date.now();
   if (!TOKEN) {
     throw new ApiError(
@@ -96,7 +104,12 @@ export async function get<T>(path: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` },
+      method,
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        ...(payload === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
       signal: AbortSignal.timeout(60_000),
       // A request that carries the token never follows a redirect.
       redirect: "manual",
@@ -145,6 +158,12 @@ export async function get<T>(path: string): Promise<T> {
   audit(path, "200", Date.now() - started);
   return body;
 }
+
+export const get = <T,>(path: string): Promise<T> => request<T>("GET", path);
+
+/** The one write. The route it reaches needs the write scope and ourpr create. */
+export const post = <T,>(path: string, body: unknown): Promise<T> =>
+  request<T>("POST", path, body);
 
 // Units: the API speaks metres and an agent reads miles. Convert once, here.
 

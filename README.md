@@ -132,6 +132,24 @@ done that resembles a race you are training for.
 "What have I run that's like Boston — 26 miles, 800 feet of climb?"
 ```
 
+### `ourpr_plan_week`
+
+The one write. One planned run, or a week of them, onto days still ahead.
+Each lands on the runner's week as a plan they can see, edit and remove; the
+day sheet says it came from outside. It never logs a run.
+
+```
+"Put a 6 mile easy run on Tuesday and 14 long on Saturday"
+"Write me next week: three easy days, one workout, one long run"
+```
+
+`plans`, one to fourteen, each with `date` (YYYY-MM-DD, after today) and any
+of `miles`, `minutes`, `name`, `note`, `tag` (easy, workout, race), `is_long`.
+
+Needs a token made with the **Read and write** scope in Settings, and ourpr
+create behind it. A read-only token, or one without it, is refused before
+anything is written. Thirty plans a day.
+
 ## How the tool set was chosen
 
 By an evaluation, not by listing the API.
@@ -166,12 +184,14 @@ numbers the agent would only reduce anyway.
 
 ## Security
 
-The token grants read access to your own activity data and nothing else. It
-cannot write, cannot issue another token, cannot revoke your existing ones, and
-cannot widen its own scope.
+The token grants read access to your own activity data. A token made with the
+write scope, with ourpr create, may also put plans on your own week through
+one route, and nothing else. No token can log a run, issue another token, revoke
+your existing ones, or widen its own scope.
 
-Each token may make 60 reads a minute. ourpr answers 429 past that, with
-`RateLimit` and `Retry-After` headers, and the tool says how long to wait.
+Each token may make 60 reads a minute, and a runner may write 30 plans a day.
+ourpr answers 429 past either, with `RateLimit` and `Retry-After` headers, and
+the tool says how long to wait.
 
 Revoke any token at any time in **Settings → Access tokens**. Revocation is
 immediate and permanent — a revoked token can never be restored.

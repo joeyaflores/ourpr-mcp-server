@@ -1,6 +1,6 @@
 {
   "name": "ourpr-mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server that gives an AI agent read access to your own ourpr running history",
   "mcpName": "io.github.joeyaflores/ourpr-mcp-server",
   "type": "module",

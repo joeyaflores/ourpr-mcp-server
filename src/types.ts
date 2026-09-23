@@ -95,6 +95,18 @@ export interface TerrainMatch {
   grade_pct: number;
 }
 
+/** One plan as the API returns it after a write. */
+export interface PlannedRun {
+  id: string;
+  planned_date: string;
+  name: string | null;
+  distance_meters: number | null;
+  duration_seconds: number | null;
+  tag: string | null;
+  is_long: boolean;
+  source: "app" | "token";
+}
+
 export interface TerrainResponse {
   matches: TerrainMatch[];
   scanned: number;
