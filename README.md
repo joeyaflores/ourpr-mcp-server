@@ -1,10 +1,12 @@
 # ourpr-mcp-server
 
 An MCP server that lets an AI agent read **your own** running history from
-[ourpr](https://ourpr.app). Ask about your training in plain language, in
-whatever agent you already use.
+[ourpr](https://ourpr.app), and write one thing back. Ask about your
+training in plain language, in whatever agent you already use.
 
-Read only. It cannot change a run, plan a week, or issue another credential.
+Every tool reads. One tool writes, and only that one: `ourpr_plan_week` puts
+a plan on a day still ahead. It cannot log a run, edit history, or issue
+another credential, and it needs a token made with the write scope.
 
 ## Why it exists
 
@@ -16,8 +18,9 @@ credential you issued to yourself and can revoke.
 ## Setup
 
 **1. Make a token.** In ourpr, go to **Settings → Access tokens → New token**.
-Name it after the machine it will live on. Copy it — it is shown once and
-cannot be recovered. A token lasts 90 days.
+Name it after the machine it will live on, and choose **Read and write** if
+you want the agent to plan your week; **Read only** otherwise. Copy it — it
+is shown once and cannot be recovered. A token lasts 90 days.
 
 **2. Point a client at it.** The package runs from npm; nothing to clone.
 
