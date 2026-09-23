@@ -261,6 +261,11 @@ bundle's entry point; `npx @anthropic-ai/mcpb pack` builds `ourpr.mcpb` for
 the release. `server.json` registers the package in the MCP Registry with
 `mcp-publisher publish`.
 
+The tag run answers npm's `E404` on the PUT until the package lists this
+repository and `publish.yml` as a trusted publisher on npmjs.com (package
+settings, Trusted publisher). Until then the release is by hand: `npm login`,
+then `npm publish` from this directory, which builds and tests first.
+
 ## License
 
 MIT
