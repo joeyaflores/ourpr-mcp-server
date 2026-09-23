@@ -3,8 +3,8 @@
   "name": "ourpr-mcp-server",
   "display_name": "ourpr",
   "version": "0.3.0",
-  "description": "Read your own ourpr running history in Claude.",
-  "long_description": "Runs, mile splits, watch laps, streams, interval workouts and similar terrain, from your own ourpr account. Read only. The token comes from ourpr Settings and you can revoke it there at any time.",
+  "description": "Read your own ourpr running history in Claude, and plan the week ahead.",
+  "long_description": "Runs, mile splits, watch laps, streams, interval workouts and similar terrain, from your own ourpr account, plus one write: a plan on the week ahead, for a token made with the write scope. The token comes from ourpr Settings and you can revoke it there at any time.",
   "author": { "name": "Joey Flores", "url": "https://ourpr.app" },
   "homepage": "https://ourpr.app/your-runs",
   "documentation": "https://github.com/joeyaflores/ourpr-mcp-server#readme",
@@ -37,7 +37,8 @@
     { "name": "ourpr_run_laps", "description": "The laps the watch recorded." },
     { "name": "ourpr_rep_workouts", "description": "Every interval workout in your history." },
     { "name": "ourpr_detect_reps", "description": "Whether one run was an interval workout." },
-    { "name": "ourpr_similar_terrain", "description": "Runs that match a distance and a climb." }
+    { "name": "ourpr_similar_terrain", "description": "Runs that match a distance and a climb." },
+    { "name": "ourpr_plan_week", "description": "Put a plan on a day still ahead. The one write." }
   ],
   "compatibility": { "claude_desktop": ">=0.10.0", "platforms": ["darwin", "win32", "linux"], "runtimes": { "node": ">=22.14.0" } }
 }
