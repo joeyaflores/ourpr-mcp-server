@@ -17,10 +17,11 @@ credential you issued to yourself and can revoke.
 
 ## Setup
 
-**1. Make a token.** In ourpr, go to **Settings → Access tokens → New token**.
-Name it after the machine it will live on, and choose **Read and write** if
-you want the agent to plan your week; **Read only** otherwise. Copy it — it
-is shown once and cannot be recovered. A token lasts 90 days.
+**1. Make a token.** In ourpr, go to
+**Profile → Settings → ourpr. mcp → New token**. Name it after the machine it
+will live on, and choose **Write** if you want the agent to plan your week;
+**Read** otherwise. Copy it — it is shown once and cannot be
+recovered. A token lasts 90 days.
 
 **2. Point a client at it.** The package runs from npm; nothing to clone.
 
@@ -139,7 +140,7 @@ done that resembles a race you are training for.
 
 The one write. One planned run, or a week of them, onto days still ahead.
 Each lands on the runner's week as a plan they can see, edit and remove; the
-day sheet says it came from outside. It never logs a run.
+day sheet says it came from ourpr create. It never logs a run.
 
 ```
 "Put a 6 mile easy run on Tuesday and 14 long on Saturday"
@@ -149,9 +150,9 @@ day sheet says it came from outside. It never logs a run.
 `plans`, one to fourteen, each with `date` (YYYY-MM-DD, after today) and any
 of `miles`, `minutes`, `name`, `note`, `tag` (easy, workout, race), `is_long`.
 
-Needs a token made with the **Read and write** scope in Settings, and ourpr
-create behind it. A read-only token, or one without it, is refused before
-anything is written. Thirty plans a day.
+Needs a token made with the **Write** scope, and ourpr create on the account.
+A **Read** token, or an account without create, is refused before anything is
+written. Thirty plans a day.
 
 ## How the tool set was chosen
 
@@ -196,8 +197,8 @@ Each token may make 60 reads a minute, and a runner may write 30 plans a day.
 ourpr answers 429 past either, with `RateLimit` and `Retry-After` headers, and
 the tool says how long to wait.
 
-Revoke any token at any time in **Settings → Access tokens**. Revocation is
-immediate and permanent — a revoked token can never be restored.
+Revoke any token at any time in **Profile → Settings → ourpr. mcp**.
+Revocation is immediate and permanent — a revoked token can never be restored.
 
 ### Tool results are untrusted content
 

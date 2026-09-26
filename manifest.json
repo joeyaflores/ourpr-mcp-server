@@ -1,12 +1,13 @@
 {
   "manifest_version": "0.3",
   "name": "ourpr-mcp-server",
-  "display_name": "ourpr",
+  "display_name": "ourpr.",
   "version": "0.3.0",
   "description": "Read your own ourpr running history in Claude, and plan the week ahead.",
   "long_description": "Runs, mile splits, watch laps, streams, interval workouts and similar terrain, from your own ourpr account, plus one write: a plan on the week ahead, for a token made with the write scope. The token comes from ourpr Settings and you can revoke it there at any time.",
   "author": { "name": "Joey Flores", "url": "https://ourpr.app" },
   "homepage": "https://ourpr.app/your-runs",
+  "icon": "icon.png",
   "documentation": "https://github.com/joeyaflores/ourpr-mcp-server#readme",
   "support": "https://ourpr.app/support",
   "license": "MIT",
@@ -25,7 +26,7 @@
     "token": {
       "type": "string",
       "title": "Access token",
-      "description": "From ourpr: Settings, Access tokens, New token.",
+      "description": "In ourpr: Profile, Settings, ourpr. mcp, New token.",
       "sensitive": true,
       "required": true
     }

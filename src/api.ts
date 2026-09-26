@@ -72,7 +72,7 @@ function guidance(status: number, detail: string, retryAfterS?: string): string 
     return (
       "ourpr rejected the token. It may be revoked, expired (a token lasts 90 " +
       "days), or OURPR_TOKEN may be unset. Make a new one in ourpr under " +
-      "Settings, Access tokens."
+      "Profile, Settings, ourpr. mcp."
     );
   }
   if (status === 403) {
@@ -96,8 +96,8 @@ async function request<T>(method: "GET" | "POST", path: string, payload?: unknow
   const started = Date.now();
   if (!TOKEN) {
     throw new ApiError(
-      "OURPR_TOKEN is not set. Create a token in ourpr under Settings, " +
-        "Access tokens, then put it in this server's environment.",
+      "OURPR_TOKEN is not set. Create a token in ourpr under Profile, " +
+        "Settings, ourpr. mcp, then put it in this server's environment.",
     );
   }
 
