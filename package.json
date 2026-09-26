@@ -1,6 +1,6 @@
 {
   "name": "ourpr-mcp-server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server for your own ourpr running history: read it, and put a plan on the week ahead",
   "mcpName": "io.github.joeyaflores/ourpr-mcp-server",
   "type": "module",
@@ -11,7 +11,8 @@
     "build",
     "manifest.json",
     "server.json",
-    "icon.png"
+    "icon.png",
+    "npm-shrinkwrap.json"
   ],
   "scripts": {
     "build": "tsc && node -e \"const fs=require('fs');const f='build/index.js';const c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!')){fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c)};fs.chmodSync(f,0o755)\"",
@@ -44,10 +45,12 @@
   "author": "Joey Flores",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
     "@types/node": "^22.15.0",
     "tsx": "^4.23.13",
     "typescript": "^5.8.3"

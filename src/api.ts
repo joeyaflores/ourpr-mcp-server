@@ -186,8 +186,42 @@ export function duration(seconds?: number | null): string | null {
   return h ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** "3:05:12" or "21:40". A race result reads to the second. */
+export function clock(seconds?: number | null): string | null {
+  if (!seconds) return null;
+  const whole = Math.round(seconds);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = String(whole % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
 /** A day key, YYYY-MM-DD, out of whatever the API stored. */
 export const day = (iso?: string | null): string => (iso ?? "").slice(0, 10);
+
+/** Today on this machine's calendar, which is the runner's own. */
+export function localDay(now: Date): string {
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${m}-${d}`;
+}
+
+// Day keys are walked as UTC dates, so a clock change never moves a day.
+const DAY_MS = 86_400_000;
+const dayMs = (key: string): number => Date.parse(`${key}T00:00:00Z`);
+
+export function addDays(key: string, days: number): string {
+  const ms = dayMs(key);
+  if (Number.isNaN(ms)) throw new ApiError(`"${key}" is not a date. Use YYYY-MM-DD.`);
+  return new Date(ms + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Which week of a Block `today` falls in, or 0 before week 1's Monday. */
+export function weekOf(start: string, weeks: number, today: string): number {
+  const walked = Math.floor((dayMs(today) - dayMs(start)) / DAY_MS);
+  if (Number.isNaN(walked) || walked < 0) return 0;
+  return Math.min(weeks, Math.floor(walked / 7) + 1);
+}
 
 /** A calendar date to a Unix second; "end" reaches the end of the day. */
 export function stamp(date: string, edge: "start" | "end"): number {

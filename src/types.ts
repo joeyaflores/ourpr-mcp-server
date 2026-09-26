@@ -95,16 +95,67 @@ export interface TerrainMatch {
   grade_pct: number;
 }
 
-/** One plan as the API returns it after a write. */
+/** One plan as the API returns it. */
 export interface PlannedRun {
   id: string;
   planned_date: string;
+  activity_type?: string | null;
   name: string | null;
   distance_meters: number | null;
   duration_seconds: number | null;
+  note?: string | null;
+  course_slug?: string | null;
   tag: string | null;
   is_long: boolean;
   source: "app" | "token";
+  // Set once a logged run fulfils the plan; the id ourpr_get_run takes.
+  completed_activity_id?: string | null;
+}
+
+export interface WeekMiles {
+  week_key: string;
+  miles: number;
+  runs: number;
+}
+
+/** One Block: the race-anchored weeks before a race, or before the goal race. */
+export interface RaceArc {
+  race_name: string;
+  race_date: string;
+  distance_category: string;
+  // A result for a race run; the goal time, or "", for the goal.
+  finish_time: string;
+  // Week 1's Monday.
+  arc_start: string;
+  arc_weeks: number;
+  is_goal: boolean;
+  total_miles: number;
+  total_runs: number;
+  tune_ups: { race_name: string; race_date: string; distance_category: string; finish_time: string }[];
+  key_workouts: { name: string; date: string; distance_miles: number; workout_type: string }[];
+  weekly_mileage: WeekMiles[];
+}
+
+export interface RaceArcsResponse {
+  arcs: RaceArc[];
+  total_races: number;
+}
+
+export interface RaceRow {
+  activity_id: string;
+  name: string;
+  date: string;
+  distance_miles: number;
+  distance_category: string;
+  duration_seconds: number;
+  pace_per_mile?: string | null;
+  // The Block this race closed; null for a tune-up raced inside another.
+  block_slug?: string | null;
+}
+
+export interface RaceHistoryResponse {
+  races: RaceRow[];
+  total: number;
 }
 
 export interface TerrainResponse {

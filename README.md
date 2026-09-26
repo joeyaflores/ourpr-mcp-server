@@ -25,34 +25,97 @@ recovered. A token lasts 90 days.
 
 **2. Point a client at it.** The package runs from npm; nothing to clone.
 
+**Keep the token out of any file inside a project.** A project's `.mcp.json`,
+`.cursor/mcp.json` or `.vscode/mcp.json` is often committed, and a committed
+token can be read by anyone who can read the repository. Every setup below
+keeps the token in a user-level place or in your system's secret store.
+
+**Pin the version.** Each setup names an exact version, so a new release never
+runs with your token until you choose it. Change the number to update.
+
 ### Claude Code
 
+Read the token without echoing it, so it stays out of your shell history, then
+add the server for your user, not for a project:
+
 ```bash
-claude mcp add ourpr --env OURPR_TOKEN=ourpr_pat_... -- npx -y ourpr-mcp-server
+printf 'Token: '; read -rs OURPR_TOKEN; echo
+claude mcp add --scope user --env OURPR_TOKEN="$OURPR_TOKEN" --transport stdio \
+  ourpr -- npx -y ourpr-mcp-server@0.4.0
+unset OURPR_TOKEN
 ```
+
+Claude Code keeps it in `~/.claude.json`, which belongs to your user.
 
 ### Claude Desktop
 
 Download `ourpr.mcpb` from the latest release and open it. Claude Desktop asks
-for the token and stores it as a secret.
+for the token and keeps it in your system's secret store. This is the
+recommended way.
 
-Or edit `claude_desktop_config.json`:
+Or edit `claude_desktop_config.json`, which lives in your user folder, not in
+a project. The token is then plain text in that file:
 
 ```json
 {
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server"],
+      "args": ["-y", "ourpr-mcp-server@0.4.0"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
 }
 ```
 
-### Cursor, VS Code
+### VS Code
 
-`.cursor/mcp.json` or `.vscode/mcp.json`, same shape as above.
+Run **MCP: Open User Configuration** and add the server there. VS Code asks
+for the token once, masks it, and keeps it in its secret store:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "ourpr-token",
+      "description": "ourpr personal access token",
+      "password": true
+    }
+  ],
+  "servers": {
+    "ourpr": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "ourpr-mcp-server@0.4.0"],
+      "env": { "OURPR_TOKEN": "${input:ourpr-token}" }
+    }
+  }
+}
+```
+
+### Cursor
+
+Set `OURPR_TOKEN` in your shell profile or your system's secret manager, and
+add the server to the global `~/.cursor/mcp.json`. The file holds only a
+reference to the variable:
+
+```json
+{
+  "mcpServers": {
+    "ourpr": {
+      "command": "npx",
+      "args": ["-y", "ourpr-mcp-server@0.4.0"],
+      "env": { "OURPR_TOKEN": "${env:OURPR_TOKEN}" }
+    }
+  }
+}
+```
+
+### If a token leaks
+
+Revoke it in **Profile → Settings → ourpr. mcp**, then make a new one.
+Revocation is immediate.
 
 ### From source
 
@@ -61,6 +124,12 @@ git clone https://github.com/joeyaflores/ourpr-mcp-server.git
 cd ourpr-mcp-server
 npm install && npm run build && npm test
 ```
+
+## Protocol
+
+The server speaks MCP `2026-07-28`, and it still answers a client that opens
+with the older `initialize` handshake. It is built on the official TypeScript
+SDK v2 (`@modelcontextprotocol/server`), and the tests run each version.
 
 ## Environment
 
@@ -136,6 +205,49 @@ done that resembles a race you are training for.
 "What have I run that's like Boston — 26 miles, 800 feet of climb?"
 ```
 
+### `ourpr_training_blocks`
+
+Your goal race and its Block: race day, distance, goal time, the week of the
+Block today falls in, and the miles for each week so far. A week that has not
+begun shows no miles, not zero. Also the Blocks before your past races, each
+with its result, its weeks and its peak week.
+
+```
+"What week of my Dallas block am I in, and how is my mileage building?"
+"How does this block compare with the one before my last marathon?"
+```
+
+`past`: how many past Blocks, newest first. Three by default.
+
+### `ourpr_list_races`
+
+Every race ourpr finds in your history, tune-ups included, through the same
+detector the app's Blocks use. Each row carries the run id for
+`ourpr_get_run`. The answer also names the fastest result at 5K, 10K, half
+marathon and marathon.
+
+```
+"What is my half marathon PR?"
+"List every marathon I have run, with the times"
+```
+
+`distance`, `limit`.
+
+### `ourpr_list_plans`
+
+The plans already on your week between two dates, two weeks from today by
+default: the day, the name, the miles or time, the tag, your note, whether a
+run you logged fulfilled it, and whether ourpr create wrote it. An agent reads
+this before `ourpr_plan_week`, so a new plan does not land on a day that
+already holds one.
+
+```
+"What do I have planned for the next two weeks?"
+"Did I do the runs I planned last week?"
+```
+
+`start_date`, `end_date` (YYYY-MM-DD).
+
 ### `ourpr_plan_week`
 
 The one write. One planned run, or a week of them, onto days still ahead.
@@ -188,7 +300,9 @@ numbers the agent would only reduce anyway.
 
 ## Security
 
-The token grants read access to your own activity data. A token made with the
+The token grants read access to your own runs, your goal race and your plans.
+On ourpr, every query a token makes is scoped to its owner by construction, and
+a test refuses a token route that could reach past it. A token made with the
 write scope, with ourpr create, may also put plans on your own week through
 one route, and nothing else. No token can log a run, issue another token, revoke
 your existing ones, or widen its own scope.
@@ -265,10 +379,17 @@ bundle's entry point; `npx @anthropic-ai/mcpb pack` builds `ourpr.mcpb` for
 the release. `server.json` registers the package in the MCP Registry with
 `mcp-publisher publish`.
 
-The tag run answers npm's `E404` on the PUT until the package lists this
-repository and `publish.yml` as a trusted publisher on npmjs.com (package
-settings, Trusted publisher). Until then the release is by hand: `npm login`,
-then `npm publish` from this directory, which builds and tests first.
+Trusted publishing is the only way in. The package's npm settings require
+two-factor authentication and disallow tokens, so no stolen npm token can
+publish a version, and the OIDC workflow still can. `npm-shrinkwrap.json` ships
+in the package, so every install resolves the same dependency tree that the
+release tested. Run `npm install` and commit the shrinkwrap after any
+dependency change.
+
+A release changes the version in five places: `package.json`,
+`npm-shrinkwrap.json` (through `npm install`), `manifest.json`, `server.json`
+and the `McpServer` in `src/index.ts`. Every setup command in this README pins
+the version, and so does `AGENT_VERSION` in ourpr's `lib/agent-connect.ts`.
 
 ## License
 
