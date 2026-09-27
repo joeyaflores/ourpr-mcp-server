@@ -8,6 +8,16 @@ Every tool reads. One tool writes, and only that one: `ourpr_plan_week` puts
 a plan on a day still ahead. It cannot log a run, edit history, or issue
 another credential, and it needs a token made with the write scope.
 
+In Claude you do not need this package. Add ourpr. from
+https://ourpr.app/your-runs: it signs you in once, with no token and nothing
+to install. This package is for a script or an agent on your own computer.
+
+## Price
+
+Reading your own runs is free. Planning is part of **ourpr create**, $10 a
+month, cancel any time: `ourpr_plan_week` answers only on an account that has
+it. Nothing else in ourpr costs money.
+
 ## Why it exists
 
 Every authenticated read in ourpr is gated by a session that lives about an
@@ -17,8 +27,8 @@ credential you issued to yourself and can revoke.
 
 ## Setup
 
-**1. Make a token.** In ourpr, go to
-**Profile → Settings → ourpr. mcp → New token**. Name it after the machine it
+**1. Make a token.** In ourpr, go to **Settings → ourpr. mcp → Tokens for a
+script or a local server → New token**. Name it after the machine it
 will live on, and choose **Write** if you want the agent to plan your week;
 **Read** otherwise. Copy it — it is shown once and cannot be
 recovered. A token lasts 90 days.
@@ -41,7 +51,7 @@ add the server for your user, not for a project:
 ```bash
 printf 'Token: '; read -rs OURPR_TOKEN; echo
 claude mcp add --scope user --env OURPR_TOKEN="$OURPR_TOKEN" --transport stdio \
-  ourpr -- npx -y ourpr-mcp-server@0.4.0
+  ourpr -- npx -y ourpr-mcp-server@0.4.1
 unset OURPR_TOKEN
 ```
 
@@ -61,7 +71,7 @@ a project. The token is then plain text in that file:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.0"],
+      "args": ["-y", "ourpr-mcp-server@0.4.1"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
@@ -87,7 +97,7 @@ for the token once, masks it, and keeps it in its secret store:
     "ourpr": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.0"],
+      "args": ["-y", "ourpr-mcp-server@0.4.1"],
       "env": { "OURPR_TOKEN": "${input:ourpr-token}" }
     }
   }
@@ -105,7 +115,7 @@ reference to the variable:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.0"],
+      "args": ["-y", "ourpr-mcp-server@0.4.1"],
       "env": { "OURPR_TOKEN": "${env:OURPR_TOKEN}" }
     }
   }
@@ -143,6 +153,11 @@ it never changes between calls, so passing it per call would put a live
 credential into the agent's context, its transcript, and any log of either.
 
 ## Tools
+
+Every tool reads what you imported into ourpr, and what you logged or planned
+there. Runs that reach ourpr through the Strava sync stay out: Strava's API
+Policy (2026) keeps its API data out of MCP servers and AI tools. Your Strava
+bulk export is yours to use anywhere, so import it and every run is here.
 
 ### `ourpr_list_runs`
 

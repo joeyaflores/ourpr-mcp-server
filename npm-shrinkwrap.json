@@ -1,12 +1,12 @@
 {
   "name": "ourpr-mcp-server",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "ourpr-mcp-server",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "license": "MIT",
       "dependencies": {
         "@modelcontextprotocol/server": "^2.1.0",

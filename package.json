@@ -1,6 +1,6 @@
 {
   "name": "ourpr-mcp-server",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "MCP server for your own ourpr running history: read it, and put a plan on the week ahead",
   "mcpName": "io.github.joeyaflores/ourpr-mcp-server",
   "type": "module",
