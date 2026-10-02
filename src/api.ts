@@ -58,15 +58,31 @@ function deepestMessage(err: unknown): string {
 }
 
 /** Thrown with copy an agent can act on rather than a status code. */
-export class ApiError extends Error {}
+/** `status` is the HTTP answer, where there was one: a tool may read a 404 its own way. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
-function guidance(status: number, detail: string, retryAfterS?: string): string {
+/** Retry-After in words. The daily plan cap answers in hours, and an agent
+ *  told to wait 50,000 seconds relays the number, not the time. */
+export function waitWords(retryAfterS?: string): string {
+  if (!/^\d+$/.test(retryAfterS ?? "")) return "a minute";
+  const s = Number(retryAfterS);
+  if (s <= 90) return s === 1 ? "1 second" : `${s} seconds`;
+  if (s < 90 * 60) return `${Math.ceil(s / 60)} minutes`;
+  return `about ${Math.ceil(s / 3600)} hours`;
+}
+
+export function guidance(status: number, detail: string, retryAfterS?: string): string {
   if (status === 429) {
-    const wait = /^\d+$/.test(retryAfterS ?? "") ? `${retryAfterS} seconds` : "a minute";
-    return (
-      "ourpr allows 60 reads a minute for each token and 30 plans a day. " +
-      `Wait ${wait}, then ask again.`
-    );
+    // The detail names the limit that refused: the reads or the plans.
+    const limit = detail || "ourpr limits reads for each token and plans for each runner.";
+    return `${limit} Wait ${waitWords(retryAfterS)}, then ask again.`;
   }
   if (status === 401) {
     return (
@@ -142,6 +158,7 @@ async function request<T>(method: "GET" | "POST", path: string, payload?: unknow
     audit(path, `${response.status}`, Date.now() - started);
     throw new ApiError(
       guidance(response.status, detail, response.headers.get("retry-after") ?? undefined),
+      response.status,
     );
   }
   let body: T;

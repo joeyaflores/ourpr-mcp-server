@@ -18,6 +18,13 @@ import {
   stamp,
   weekOf,
 } from "./api.js";
+import {
+  beatsPerMile,
+  efficiencyFactor,
+  effortHalves,
+  paceSeconds,
+  splitHeartRates,
+} from "./effort.js";
 import { cell, fenced, note } from "./safe.js";
 import type {
   ActivitiesResponse,
@@ -61,10 +68,19 @@ const fail = (err: unknown) => ({
   isError: true,
 });
 
+/** The local start, as every import stores it: wall clock with a "Z". A
+ *  logged run holds the moment it was logged or noon, so it gives none. */
+function startClock(a: Activity): string | null {
+  if (String(a.id).startsWith("manual-")) return null;
+  const match = /T(\d{2}:\d{2})/.exec(a.date ?? "");
+  return match ? match[1] : null;
+}
+
 function summarise(a: Activity) {
   return {
     id: String(a.id),
     date: day(a.date),
+    start: startClock(a),
     name: cell(a.name),
     type: cell(a.activity_type, 24),
     miles: miles(a.distance_meters),
@@ -75,16 +91,36 @@ function summarise(a: Activity) {
   };
 }
 
+type Row = ReturnType<typeof summarise> & {
+  efficiency_factor?: number | null;
+  beats_per_mile?: number | null;
+};
+
+/** Friel's efficiency factor and the heartbeats one mile took, both from the
+ *  run's own moving pace and average heart rate. */
+function withEffort(row: ReturnType<typeof summarise>): Row {
+  const pace = paceSeconds(row.pace_per_mile);
+  return {
+    ...row,
+    efficiency_factor: efficiencyFactor(pace, row.avg_hr),
+    beats_per_mile: beatsPerMile(pace, row.avg_hr),
+  };
+}
+
 // A markdown table costs fewer tokens than the same rows as objects.
-function table(rows: ReturnType<typeof summarise>[]): string {
+function table(rows: Row[]): string {
+  const effort = rows.some((r) => "efficiency_factor" in r);
   const head =
-    "| date | name | type | mi | pace | time | ft | hr |\n" +
-    "|---|---|---|---|---|---|---|---|";
+    "| date | start | name | type | mi | pace | time | ft | hr |" +
+    (effort ? " ef | beats/mi |" : "") +
+    "\n|---|---|---|---|---|---|---|---|---|" +
+    (effort ? "---|---|" : "");
   const body = rows
     .map((r) =>
-      `| ${r.date} | ${r.name} | ${r.type} | ${r.miles ?? "—"} | ` +
+      `| ${r.date} | ${r.start ?? "—"} | ${r.name} | ${r.type} | ${r.miles ?? "—"} | ` +
       `${r.pace_per_mile ?? "—"} | ${r.moving_time ?? "—"} | ` +
-      `${r.elevation_ft ?? "—"} | ${r.avg_hr ?? "—"} |`,
+      `${r.elevation_ft ?? "—"} | ${r.avg_hr ?? "—"} |` +
+      (effort ? ` ${r.efficiency_factor ?? "—"} | ${r.beats_per_mile ?? "—"} |` : ""),
     )
     .join("\n");
   return `${head}\n${body}`;
@@ -94,7 +130,7 @@ function table(rows: ReturnType<typeof summarise>[]): string {
 // message says which protocol era the client speaks.
 function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "ourpr-mcp-server", version: "0.4.1" },
+    { name: "ourpr-mcp-server", version: "0.5.0" },
     {
       instructions:
         "ourpr. holds one runner's own history: runs, Blocks, races and plans. " +
@@ -111,8 +147,9 @@ function buildServer(): McpServer {
     {
       title: "List runs in a date range",
       description:
-        "Training history between two dates, newest first: date, name, type, " +
-        "miles, pace, time, elevation, average heart rate. Start here for " +
+        "Training history between two dates, newest first: date, local start, name, type, " +
+        "miles, pace, time, elevation, average heart rate, and on a runs-only " +
+        "list Friel's efficiency factor and the heartbeats each mile took. Start here for " +
         "totals, streaks, trends, or finding a run. For one run's splits, use " +
         "ourpr_get_run with an id from here.",
       inputSchema: {
@@ -149,7 +186,10 @@ function buildServer(): McpServer {
             `&before=${stamp(end_date, "end")}` +
             `&include_non_runs=${include_non_runs}`,
         );
-        const all = data.activities.map(summarise);
+        // Efficiency needs a run's pace; a ride's speed is another measure.
+        const all = data.activities.map((a) =>
+          include_non_runs ? summarise(a) : withEffort(summarise(a)),
+        );
         const shown = all.slice(0, limit);
         const truncated = all.length > shown.length;
 
@@ -159,7 +199,12 @@ function buildServer(): McpServer {
           (truncated
             ? ` Showing the ${shown.length} newest — ${all.length - shown.length} ` +
               "older ones are not listed. Narrow the dates or raise `limit` to see them."
-            : "");
+            : "") +
+          (include_non_runs
+            ? " Efficiency is given only on a runs-only list."
+            : " ef is Friel's efficiency factor: yards a minute over average heart rate," +
+              " higher is better. beats/mi is the heartbeats one mile took, lower is" +
+              " better. Compare only steady runs on similar ground and weather.");
 
         return ok(`${header}\n\n` + fenced(shown.length ? table(shown) : "No activities in that window."), {
           runs: shown,
@@ -180,7 +225,7 @@ function buildServer(): McpServer {
     {
       title: "Get one run in full",
       description:
-        "One activity in full: mile splits, heart rate, cadence, calories, " +
+        "One activity in full: mile splits with heart rate, cadence, calories, " +
         "device. Id comes from ourpr_list_runs. For the profile along the " +
         "route, use ourpr_run_stream.",
       inputSchema: {
@@ -196,10 +241,20 @@ function buildServer(): McpServer {
     },
     async ({ activity_id }) => {
       try {
-        const a = await get<Activity>(`/users/me/activities/${pathId(activity_id)}`);
-        const splits = (a.splits ?? []).map((s) => ({
+        const id = pathId(activity_id);
+        // No profile is a normal answer for an indoor run, so the splits then carry no heart rate.
+        const [a, stream] = await Promise.all([
+          get<Activity>(`/users/me/activities/${id}`),
+          get<StreamResponse>(`/users/me/activities/${id}/stream`).catch(() => null),
+        ]);
+        const raw = a.splits ?? [];
+        const hrs = stream
+          ? splitHeartRates(stream, raw.map((s) => s.distance_meters))
+          : raw.map(() => null);
+        const splits = raw.map((s, i) => ({
           mile: s.split_number,
           pace: s.pace_per_mile ?? null,
+          avg_hr: hrs[i],
           elevation_change_ft: feet(s.elevation_difference_meters),
         }));
         const run = {
@@ -217,8 +272,10 @@ function buildServer(): McpServer {
             `${run.moving_time ?? "—"} · ${run.elevation_ft ?? "—"} ft climb`,
           run.avg_hr ? `Heart rate ${run.avg_hr} avg, ${run.max_hr ?? "—"} max` : "",
           splits.length
-            ? `\n| mile | pace | ± ft |\n|---|---|---|\n` +
-              splits.map((s) => `| ${s.mile} | ${s.pace ?? "—"} | ${s.elevation_change_ft ?? "—"} |`).join("\n")
+            ? `\n| mile | pace | hr | ± ft |\n|---|---|---|---|\n` +
+              splits
+                .map((s) => `| ${s.mile} | ${s.pace ?? "—"} | ${s.avg_hr ?? "—"} | ${s.elevation_change_ft ?? "—"} |`)
+                .join("\n")
             : "\nNo mile splits recorded for this run.",
         ].filter(Boolean);
 
@@ -238,7 +295,9 @@ function buildServer(): McpServer {
       description:
         "A run's profile on a 10 m grid — elevation, heart rate, power, " +
         "cadence — as min, average, max and coverage per channel, not every " +
-        "sample. No profile is a normal answer for an indoor run.",
+        "sample. Also each half by distance with its moving pace, heart rate " +
+        "and efficiency, and the drift between them (aerobic decoupling, Pa:HR). " +
+        "No profile is a normal answer for an indoor run.",
       inputSchema: {
         activity_id: z.string().describe("Run id from ourpr_list_runs."),
       },
@@ -247,6 +306,7 @@ function buildServer(): McpServer {
         total_miles: z.number(),
         samples: z.number(),
         channels: z.record(z.string(), z.unknown()),
+        halves: z.record(z.string(), z.unknown()).nullable(),
       },
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
@@ -282,14 +342,37 @@ function buildServer(): McpServer {
           .join("\n");
 
         const total_miles = miles(s.total_m) ?? 0;
+        const halves = effortHalves(s);
+        const half = (name: string, h: NonNullable<typeof halves>["first"]) =>
+          `- ${name}: ${h.miles} mi at ${h.pace_per_mile}/mi, heart rate ${h.avg_hr ?? "—"}, ` +
+          `ef ${h.efficiency_factor ?? "—"}, ${h.beats_per_mile ?? "—"} beats/mi`;
+        const drift = halves
+          ? "\n\nEach half by distance, moving pace:\n" +
+            `${half("first", halves.first)}\n${half("second", halves.second)}\n` +
+            (halves.decoupling_pct == null
+              ? "No drift: the heart rate does not cover both halves."
+              : `Drift ${halves.decoupling_pct}% (aerobic decoupling, Pa:HR; positive means ` +
+                "the heart rate rose for the same pace). It reads only on a steady run of " +
+                "an hour or more; intervals, hills and heat raise it.")
+          : "";
         return ok(
           `Profile over ${total_miles} mi, ${s.points} samples every ${s.grid_m} m` +
             (s.source ? ` (from ${cell(s.source, 24)})` : "") +
             ".\n\n" +
-            (present || "No sensor channels were recorded for this run."),
-          { grid_m: s.grid_m, total_miles, samples: s.points, channels },
+            (present || "No sensor channels were recorded for this run.") +
+            drift,
+          { grid_m: s.grid_m, total_miles, samples: s.points, channels, halves },
         );
       } catch (err) {
+        // The stream route answers 404 for a run with no profile and for an unknown id alike.
+        if (err instanceof ApiError && err.status === 404) {
+          return fail(
+            new ApiError(
+              "No profile for this run. An indoor or hand-logged run has none; " +
+                "if the run should have one, check the id against ourpr_list_runs.",
+            ),
+          );
+        }
         return fail(err);
       }
     },

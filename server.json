@@ -6,12 +6,12 @@
     "url": "https://github.com/joeyaflores/ourpr-mcp-server",
     "source": "github"
   },
-  "version": "0.4.1",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "ourpr-mcp-server",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {

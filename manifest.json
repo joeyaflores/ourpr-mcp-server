@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ourpr-mcp-server",
   "display_name": "ourpr.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Read your own ourpr running history in Claude, and plan the week ahead.",
   "long_description": "Runs, mile splits, watch laps, streams, interval workouts, similar terrain, your goal race and Blocks, your races and your plans, from your own ourpr account, plus one write: a plan on the week ahead, for a token made with the write scope. The token comes from ourpr Settings and you can revoke it there at any time.",
   "author": { "name": "Joey Flores", "url": "https://ourpr.app" },

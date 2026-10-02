@@ -51,7 +51,7 @@ add the server for your user, not for a project:
 ```bash
 printf 'Token: '; read -rs OURPR_TOKEN; echo
 claude mcp add --scope user --env OURPR_TOKEN="$OURPR_TOKEN" --transport stdio \
-  ourpr -- npx -y ourpr-mcp-server@0.4.1
+  ourpr -- npx -y ourpr-mcp-server@0.5.0
 unset OURPR_TOKEN
 ```
 
@@ -71,7 +71,7 @@ a project. The token is then plain text in that file:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.1"],
+      "args": ["-y", "ourpr-mcp-server@0.5.0"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
@@ -97,7 +97,7 @@ for the token once, masks it, and keeps it in its secret store:
     "ourpr": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.1"],
+      "args": ["-y", "ourpr-mcp-server@0.5.0"],
       "env": { "OURPR_TOKEN": "${input:ourpr-token}" }
     }
   }
@@ -115,7 +115,7 @@ reference to the variable:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.4.1"],
+      "args": ["-y", "ourpr-mcp-server@0.5.0"],
       "env": { "OURPR_TOKEN": "${env:OURPR_TOKEN}" }
     }
   }
@@ -279,7 +279,7 @@ of `miles`, `minutes`, `name`, `note`, `tag` (easy, workout, race), `is_long`.
 
 Needs a token made with the **Write** scope, and ourpr create on the account.
 A **Read** token, or an account without create, is refused before anything is
-written. Thirty plans a day.
+written. A runner may write 120 plans a day.
 
 ## How the tool set was chosen
 
@@ -322,7 +322,7 @@ write scope, with ourpr create, may also put plans on your own week through
 one route, and nothing else. No token can log a run, issue another token, revoke
 your existing ones, or widen its own scope.
 
-Each token may make 60 reads a minute, and a runner may write 30 plans a day.
+Each token may make 60 reads a minute, and a runner may write 120 plans a day.
 ourpr answers 429 past either, with `RateLimit` and `Retry-After` headers, and
 the tool says how long to wait.
 
