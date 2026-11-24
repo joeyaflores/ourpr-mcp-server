@@ -1,5 +1,22 @@
 # ourpr-mcp-server
 
+> **Retired.** This package gets no new tools. Use the hosted server, which has
+> every tool this one has and more (records, saved routes, the Build plan):
+>
+> ```bash
+> claude mcp add --scope user --transport http ourpr https://ourpr.app/api/mcp/you
+> ```
+>
+> In Claude on the web, desktop or phone, add ourpr. from
+> https://ourpr.app/your-runs. With a personal token instead of sign-in:
+>
+> ```bash
+> claude mcp add --scope user --transport http ourpr https://ourpr.app/api/mcp \
+>   --header "Authorization: Bearer ourpr_pat_..."
+> ```
+>
+> 0.7.0 is the last release. It keeps working with your token.
+
 An MCP server that lets an AI agent read **your own** running history from
 [ourpr](https://ourpr.app), and write one thing back. Ask about your
 training in plain language, in whatever agent you already use.
@@ -53,7 +70,7 @@ add the server for your user, not for a project:
 ```bash
 printf 'Token: '; read -rs OURPR_TOKEN; echo
 claude mcp add --scope user --env OURPR_TOKEN="$OURPR_TOKEN" --transport stdio \
-  ourpr -- npx -y ourpr-mcp-server@0.6.0
+  ourpr -- npx -y ourpr-mcp-server@0.7.0
 unset OURPR_TOKEN
 ```
 
@@ -73,7 +90,7 @@ a project. The token is then plain text in that file:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.6.0"],
+      "args": ["-y", "ourpr-mcp-server@0.7.0"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
@@ -99,7 +116,7 @@ for the token once, masks it, and keeps it in its secret store:
     "ourpr": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.6.0"],
+      "args": ["-y", "ourpr-mcp-server@0.7.0"],
       "env": { "OURPR_TOKEN": "${input:ourpr-token}" }
     }
   }
@@ -117,7 +134,7 @@ reference to the variable:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.6.0"],
+      "args": ["-y", "ourpr-mcp-server@0.7.0"],
       "env": { "OURPR_TOKEN": "${env:OURPR_TOKEN}" }
     }
   }
