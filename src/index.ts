@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   ApiError,
   METERS_PER_MILE,
+  MIN_SPLIT_M,
   addDays,
   clock,
   day,
@@ -22,8 +23,11 @@ import {
   beatsPerMile,
   efficiencyFactor,
   effortHalves,
+  EVEN_PACE_PCT,
   paceSeconds,
   splitHeartRates,
+  WARM_UP_S,
+  type EffortSplit,
 } from "./effort.js";
 import { cell, fenced, note } from "./safe.js";
 import type {
@@ -46,6 +50,15 @@ function deviceLabel(d: Activity["device"]): string | null {
   if (!d) return null;
   const named = [d.make, d.model].filter(Boolean).join(" ").trim();
   return cell(named || d.app || d.raw, 40) || null;
+}
+
+// Garmin's brand rules ask that "Garmin [device model]" travel with its API data.
+function garminSource(a: Activity): string | null {
+  if (!a.garmin_api) return null;
+  if (a.garmin_attribution) return a.garmin_attribution;
+  const device = deviceLabel(a.device);
+  if (!device) return "Garmin";
+  return /^garmin\b/i.test(device) ? device : `Garmin ${device}`;
 }
 
 // Bounds one answer; when it bites, the answer says so.
@@ -88,6 +101,7 @@ function summarise(a: Activity) {
     moving_time: duration(a.duration_seconds),
     elevation_ft: feet(a.elevation_gain_meters),
     avg_hr: a.avg_heartrate ?? null,
+    data_source: garminSource(a),
   };
 }
 
@@ -110,27 +124,53 @@ function withEffort(row: ReturnType<typeof summarise>): Row {
 // A markdown table costs fewer tokens than the same rows as objects.
 function table(rows: Row[]): string {
   const effort = rows.some((r) => "efficiency_factor" in r);
+  // Garmin's rules: its line travels with each row its data fills.
+  const sourced = rows.some((r) => r.data_source);
   const head =
     "| date | start | name | type | mi | pace | time | ft | hr |" +
     (effort ? " ef | beats/mi |" : "") +
+    (sourced ? " data source |" : "") +
     "\n|---|---|---|---|---|---|---|---|---|" +
-    (effort ? "---|---|" : "");
+    (effort ? "---|---|" : "") +
+    (sourced ? "---|" : "");
   const body = rows
     .map((r) =>
       `| ${r.date} | ${r.start ?? "—"} | ${r.name} | ${r.type} | ${r.miles ?? "—"} | ` +
       `${r.pace_per_mile ?? "—"} | ${r.moving_time ?? "—"} | ` +
       `${r.elevation_ft ?? "—"} | ${r.avg_hr ?? "—"} |` +
-      (effort ? ` ${r.efficiency_factor ?? "—"} | ${r.beats_per_mile ?? "—"} |` : ""),
+      (effort ? ` ${r.efficiency_factor ?? "—"} | ${r.beats_per_mile ?? "—"} |` : "") +
+        (sourced ? ` ${r.data_source ?? "—"} |` : ""),
     )
     .join("\n");
   return `${head}\n${body}`;
+}
+
+/** The drift in words: a pace change past EVEN_PACE_PCT reads pacing, not effort. */
+function driftWords(split: EffortSplit): string {
+  const pace =
+    `The second half ran ${Math.abs(split.pace_change_pct)}% ` +
+    `${split.pace_change_pct <= 0 ? "faster" : "slower"}. `;
+  if (split.decoupling_pct == null) return pace + "No drift: the heart rate does not cover both halves.";
+  if (!split.even) {
+    return (
+      pace +
+      `Drift ${split.decoupling_pct}% reads the pacing, not the effort: it applies ` +
+      `only when the halves are within ${EVEN_PACE_PCT}% of one pace.`
+    );
+  }
+  return (
+    pace +
+    `Drift ${split.decoupling_pct}% (aerobic decoupling, Pa:HR; positive means the heart ` +
+    "rate rose for the same pace). It reads only on a steady run of an hour or more; " +
+    "hills and heat raise it."
+  );
 }
 
 // One instance for each connection. serveStdio calls this once the opening
 // message says which protocol era the client speaks.
 function buildServer(): McpServer {
   const server = new McpServer(
-    { name: "ourpr-mcp-server", version: "0.5.0" },
+    { name: "ourpr-mcp-server", version: "0.6.0" },
     {
       instructions:
         "ourpr. holds one runner's own history: runs, Blocks, races and plans. " +
@@ -247,7 +287,7 @@ function buildServer(): McpServer {
           get<Activity>(`/users/me/activities/${id}`),
           get<StreamResponse>(`/users/me/activities/${id}/stream`).catch(() => null),
         ]);
-        const raw = a.splits ?? [];
+        const raw = (a.splits ?? []).filter((s) => (s.distance_meters ?? MIN_SPLIT_M) >= MIN_SPLIT_M);
         const hrs = stream
           ? splitHeartRates(stream, raw.map((s) => s.distance_meters))
           : raw.map(() => null);
@@ -268,6 +308,7 @@ function buildServer(): McpServer {
 
         const lines = [
           `**${run.name || "Untitled"}** — ${run.date}`,
+          run.data_source ?? "",
           `${run.miles ?? "—"} mi · ${run.pace_per_mile ?? "—"}/mi · ` +
             `${run.moving_time ?? "—"} · ${run.elevation_ft ?? "—"} ft climb`,
           run.avg_hr ? `Heart rate ${run.avg_hr} avg, ${run.max_hr ?? "—"} max` : "",
@@ -296,7 +337,8 @@ function buildServer(): McpServer {
         "A run's profile on a 10 m grid — elevation, heart rate, power, " +
         "cadence — as min, average, max and coverage per channel, not every " +
         "sample. Also each half by distance with its moving pace, heart rate " +
-        "and efficiency, and the drift between them (aerobic decoupling, Pa:HR). " +
+        "and efficiency, the pace change between them, and the drift (aerobic " +
+        "decoupling, Pa:HR), also after the warm up. " +
         "No profile is a normal answer for an indoor run.",
       inputSchema: {
         activity_id: z.string().describe("Run id from ourpr_list_runs."),
@@ -349,11 +391,10 @@ function buildServer(): McpServer {
         const drift = halves
           ? "\n\nEach half by distance, moving pace:\n" +
             `${half("first", halves.first)}\n${half("second", halves.second)}\n` +
-            (halves.decoupling_pct == null
-              ? "No drift: the heart rate does not cover both halves."
-              : `Drift ${halves.decoupling_pct}% (aerobic decoupling, Pa:HR; positive means ` +
-                "the heart rate rose for the same pace). It reads only on a steady run of " +
-                "an hour or more; intervals, hills and heat raise it.")
+            driftWords(halves) +
+            (halves.after_warm_up
+              ? `\nAfter the first ${WARM_UP_S / 60} minutes: ` + driftWords(halves.after_warm_up)
+              : "")
           : "";
         return ok(
           `Profile over ${total_miles} mi, ${s.points} samples every ${s.grid_m} m` +
@@ -407,7 +448,7 @@ function buildServer(): McpServer {
             miles: mi,
             time: duration(secs),
             pace: perMile
-              ? `${Math.floor(perMile / 60)}:${String(Math.round(perMile % 60)).padStart(2, "0")}`
+              ? `${Math.floor(Math.round(perMile) / 60)}:${String(Math.round(perMile) % 60).padStart(2, "0")}`
               : null,
           };
         });

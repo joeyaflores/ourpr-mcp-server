@@ -14,9 +14,11 @@ to install. This package is for a script or an agent on your own computer.
 
 ## Price
 
-Reading your own runs is free. Planning is part of **ourpr create**, $10 a
-month, cancel any time: `ourpr_plan_week` answers only on an account that has
-it. Nothing else in ourpr costs money.
+Reading your own runs is **ourpr connect**, $5 a month, cancel any time. The
+first 14 days from your first connection are free, with no card. Planning is
+part of **ourpr create**, $10 a month, which includes reading:
+`ourpr_plan_week` answers only on an account that has it. Everything in the
+ourpr app is free.
 
 ## Why it exists
 
@@ -51,7 +53,7 @@ add the server for your user, not for a project:
 ```bash
 printf 'Token: '; read -rs OURPR_TOKEN; echo
 claude mcp add --scope user --env OURPR_TOKEN="$OURPR_TOKEN" --transport stdio \
-  ourpr -- npx -y ourpr-mcp-server@0.5.0
+  ourpr -- npx -y ourpr-mcp-server@0.6.0
 unset OURPR_TOKEN
 ```
 
@@ -71,7 +73,7 @@ a project. The token is then plain text in that file:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.5.0"],
+      "args": ["-y", "ourpr-mcp-server@0.6.0"],
       "env": { "OURPR_TOKEN": "ourpr_pat_..." }
     }
   }
@@ -97,7 +99,7 @@ for the token once, masks it, and keeps it in its secret store:
     "ourpr": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.5.0"],
+      "args": ["-y", "ourpr-mcp-server@0.6.0"],
       "env": { "OURPR_TOKEN": "${input:ourpr-token}" }
     }
   }
@@ -115,7 +117,7 @@ reference to the variable:
   "mcpServers": {
     "ourpr": {
       "command": "npx",
-      "args": ["-y", "ourpr-mcp-server@0.5.0"],
+      "args": ["-y", "ourpr-mcp-server@0.6.0"],
       "env": { "OURPR_TOKEN": "${env:OURPR_TOKEN}" }
     }
   }

@@ -15,3 +15,18 @@ test("a 429 names the limit the server gave", () => {
     "A runner may write 120 plans a day. Wait about 14 hours, then ask again.",
   );
 });
+
+test("a 403 tells a refused read from a refused write", () => {
+  assert.equal(
+    guidance(403, "Reading needs ourpr connect. Your free reads ended on October 18."),
+    "Your free reads ended. ourpr. connect opens them again at ourpr.app/settings.",
+  );
+  assert.match(guidance(403, "ourpr create needed to write."), /refused the write/);
+});
+
+test("a 403 names the switch when the runner turned it off", () => {
+  assert.match(
+    guidance(403, "Artificial Intelligence is off in your ourpr. Settings."),
+    /^AI tools are off in your ourpr Settings/,
+  );
+});

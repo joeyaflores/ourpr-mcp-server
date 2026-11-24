@@ -78,6 +78,11 @@ export function waitWords(retryAfterS?: string): string {
   return `about ${Math.ceil(s / 3600)} hours`;
 }
 
+/** The start of the backend's detail when the reads, not a write, are refused. */
+const READ_REFUSAL = "Reading needs ourpr connect";
+/** The start of the backend's detail when the runner turned the switch off. */
+const AI_OFF = "Artificial Intelligence is off";
+
 export function guidance(status: number, detail: string, retryAfterS?: string): string {
   if (status === 429) {
     // The detail names the limit that refused: the reads or the plans.
@@ -90,6 +95,12 @@ export function guidance(status: number, detail: string, retryAfterS?: string): 
       "days), or OURPR_TOKEN may be unset. Make a new one in ourpr under " +
       "Profile, Settings, ourpr. mcp."
     );
+  }
+  if (status === 403 && detail.startsWith(AI_OFF)) {
+    return "AI tools are off in your ourpr Settings, so ourpr shares none of your data.";
+  }
+  if (status === 403 && detail.startsWith(READ_REFUSAL)) {
+    return "Your free reads ended. ourpr. connect opens them again at ourpr.app/settings.";
   }
   if (status === 403) {
     return (
@@ -176,11 +187,10 @@ async function request<T>(method: "GET" | "POST", path: string, payload?: unknow
   return body;
 }
 
-export const get = <T,>(path: string): Promise<T> => request<T>("GET", path);
+export const get = <T>(path: string): Promise<T> => request<T>("GET", path);
 
 /** The one write. The route it reaches needs the write scope and ourpr create. */
-export const post = <T,>(path: string, body: unknown): Promise<T> =>
-  request<T>("POST", path, body);
+export const post = <T>(path: string, body: unknown): Promise<T> => request<T>("POST", path, body);
 
 // Units: the API speaks metres and an agent reads miles. Convert once, here.
 
@@ -188,6 +198,8 @@ export const post = <T,>(path: string, body: unknown): Promise<T> =>
 export const pathId = (value: string): string => encodeURIComponent(value);
 
 export const METERS_PER_MILE = 1609.344;
+/** A last split shorter than this is noise, the import's own floor. */
+export const MIN_SPLIT_M = 160;
 
 export const miles = (meters?: number | null): number | null =>
   meters == null ? null : Math.round((meters / METERS_PER_MILE) * 100) / 100;

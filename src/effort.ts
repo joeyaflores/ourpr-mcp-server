@@ -1,5 +1,6 @@
 // Friel's efficiency factor and aerobic decoupling, from measured figures only.
 // Twin of `ourpr-mcp-server/src/effort.ts`; effort.test.ts holds the pair.
+// The Python twin is backend/app/services/effort.py; tests/test_effort.py reads these constants.
 // No graded pace: that is a model, and the tools state what was measured.
 
 const YARDS_PER_MILE = 1760;
@@ -12,6 +13,14 @@ const MOVING_CAP_S_PER_M = 1.0;
 /** A channel thinner than this over a window gives no average. The API drops
  *  a whole channel under the same share. */
 const MIN_COVERAGE = 0.5;
+
+/** Halves further apart in pace than this read pacing, not drift: on a
+ *  negative split the second half's efficiency rises with the speed. */
+export const EVEN_PACE_PCT = 3;
+
+/** Heart rate is still climbing through a warm up; protocols leave out the
+ *  first 10 to 15 minutes before they split a run. */
+export const WARM_UP_S = 600;
 
 export interface EffortStream {
   grid_m: number;
@@ -28,11 +37,20 @@ export interface EffortWindow {
   beats_per_mile: number | null;
 }
 
-export interface EffortHalves {
+export interface EffortSplit {
   first: EffortWindow;
   second: EffortWindow;
   /** Positive: the second half took more heart rate for each yard. */
   decoupling_pct: number | null;
+  /** Positive: the second half ran slower. */
+  pace_change_pct: number;
+  /** The halves held one pace, so the drift reads effort, not pacing. */
+  even: boolean;
+}
+
+export interface EffortHalves extends EffortSplit {
+  /** The same split after the first WARM_UP_S of moving time. */
+  after_warm_up: EffortSplit | null;
 }
 
 const round = (value: number, places: number) => {
@@ -95,18 +113,30 @@ function meanHr(values: (number | null)[] | null | undefined, lo: number, hi: nu
   return count && count / (hi - lo + 1) >= MIN_COVERAGE ? total / count : null;
 }
 
+/** Each step's moving time. A step over the cap is a stop: it counts as the
+ *  typical step around it, the median of the steps under the cap, so a stop
+ *  costs what the same ground costs on the move. */
+export function movingSteps(steps: number[], cap: number): number[] {
+  const under = steps.filter((step) => step <= cap).sort((a, b) => a - b);
+  const mid = Math.floor(under.length / 2);
+  const typical =
+    under.length === 0 ? cap : under.length % 2 ? under[mid] : (under[mid - 1] + under[mid]) / 2;
+  return steps.map((step) => (step <= cap ? step : typical));
+}
+
 /** Pace from moving time, as on every path in the app. */
 export function effortBetween(stream: EffortStream, from: number, to: number): EffortWindow | null {
   const times = stream.time_s;
   if (!times || times.length < 2) return null;
   const [lo, hi] = bounds(times.length, from, to);
   const cap = MOVING_CAP_S_PER_M * (stream.grid_m || 10);
-  let moving = 0;
+  const steps: number[] = [];
   for (let i = lo + 1; i <= hi; i++) {
     const a = times[i - 1];
     const b = times[i];
-    if (a != null && b != null) moving += Math.min(b - a, cap);
+    if (a != null && b != null) steps.push(b - a);
   }
+  const moving = movingSteps(steps, cap).reduce((sum, step) => sum + step, 0);
   const miles = ((hi - lo) * stream.grid_m) / METERS_PER_MILE;
   if (moving <= 0 || miles <= 0) return null;
   const secondsPerMile = moving / miles;
@@ -121,17 +151,59 @@ export function effortBetween(stream: EffortStream, from: number, to: number): E
   };
 }
 
-/** Each half by distance, and the drift between them (Pa:HR). */
-export function effortHalves(stream: EffortStream): EffortHalves | null {
-  const first = effortBetween(stream, 0, 0.5);
-  const second = effortBetween(stream, 0.5, 1);
+/** The run from `from` to its end, cut in two by distance. */
+function splitFrom(stream: EffortStream, from: number): EffortSplit | null {
+  const mid = (from + 1) / 2;
+  const first = effortBetween(stream, from, mid);
+  const second = effortBetween(stream, mid, 1);
   if (!first || !second) return null;
   const a = first.efficiency_factor;
   const b = second.efficiency_factor;
+  const paceA = first.moving_s / first.miles;
+  const paceB = second.moving_s / second.miles;
+  const paceChange = round(((paceB - paceA) / paceA) * 100, 1);
   return {
     first,
     second,
     decoupling_pct: a && b ? round(((a - b) / a) * 100, 1) : null,
+    pace_change_pct: paceChange,
+    even: Math.abs(paceChange) <= EVEN_PACE_PCT,
+  };
+}
+
+/** Where the moving time first reaches `seconds`, as a fraction of the run. */
+function fractionAfterMoving(stream: EffortStream, seconds: number): number | null {
+  const times = stream.time_s;
+  if (!times || times.length < 2) return null;
+  const cap = MOVING_CAP_S_PER_M * (stream.grid_m || 10);
+  const at: number[] = [];
+  const steps: number[] = [];
+  for (let i = 1; i < times.length; i++) {
+    const a = times[i - 1];
+    const b = times[i];
+    if (a != null && b != null) {
+      at.push(i);
+      steps.push(b - a);
+    }
+  }
+  let moving = 0;
+  const counted = movingSteps(steps, cap);
+  for (let k = 0; k < counted.length; k++) {
+    moving += counted[k];
+    if (moving >= seconds) return at[k] / (times.length - 1);
+  }
+  return null;
+}
+
+/** Each half by distance and the drift between them (Pa:HR), then the same
+ *  after the warm up, where the run is long enough to leave one out. */
+export function effortHalves(stream: EffortStream): EffortHalves | null {
+  const whole = splitFrom(stream, 0);
+  if (!whole) return null;
+  const from = fractionAfterMoving(stream, WARM_UP_S);
+  return {
+    ...whole,
+    after_warm_up: from != null && from < 0.5 ? splitFrom(stream, from) : null,
   };
 }
 

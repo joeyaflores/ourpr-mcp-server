@@ -24,6 +24,10 @@ export interface Activity {
   } | null;
   splits?: Split[] | null;
   garmin?: Record<string, unknown> | null;
+  // True when the run holds Garmin API data.
+  garmin_api?: boolean | null;
+  // Garmin's line, "Garmin Forerunner 965", which the list read carries without a device.
+  garmin_attribution?: string | null;
   summary_polyline?: string | null;
 }
 
